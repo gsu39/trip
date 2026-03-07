@@ -14,9 +14,9 @@ body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
            flex-direction: column; overflow: hidden; border-right: 1px solid #0f3460; }
 #map { flex: 1; min-width: 0; min-height: 0; }
 #map-toggle { display: none; background: #0f3460; border: 1px solid #4ecca3;
-  color: #4ecca3; padding: 5px 14px; font-size: 0.75rem; cursor: pointer;
-  -webkit-appearance: none; appearance: none; border-radius: 0;
-  width: 100%; text-align: center; flex-shrink: 0; }
+  color: #4ecca3; padding: 4px 8px; font-size: 0.72rem; cursor: pointer;
+  -webkit-appearance: none; appearance: none; border-radius: 4px;
+  white-space: nowrap; flex-shrink: 0; }
 .hdr { padding: 12px 14px; background: #0f3460; flex-shrink: 0; }
 .hdr h1 { font-size: 0.95rem; color: #e94560; }
 .hdr p  { font-size: 0.72rem; color: #aaa; margin-top: 3px; }
@@ -41,20 +41,21 @@ body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
   body { flex-direction: column; }
   #sidebar { width: 100%; flex: 1; min-height: 0; border-right: none; border-bottom: 1px solid #0f3460; display: flex; flex-direction: column; }
   #list { flex: 1; min-height: 0; }
-  #map { height: 45vw; min-height: 180px; max-height: 260px; flex: none; transition: height 0.3s ease; }
+  #map { height: 50vh; flex: none; transition: height 0.3s ease; }
   #map.collapsed { height: 0 !important; min-height: 0; overflow: hidden; }
-  #map-toggle { display: block; }
+  #map-toggle { display: inline-block; }
+  .hdr { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 }
 </style>
 </head>
 <body>
 <div id="sidebar">
-  <div class="hdr" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+  <div class="hdr">
     <div>
       <h1>&#x1F6B4; POI Puglia &middot; Matera</h1>
-      <p>Generato il 07/03/2026 15:18 &middot; entro 1 km</p>
+      <p>Generato il 07/03/2026 15:26 &middot; entro 1 km</p>
     </div>
-    <button id="map-toggle" title="Nascondi mappa">&#x25B2; Nascondi mappa</button>
+    <button id="map-toggle" title="Nascondi mappa">&#x25B2;Mappa</button>
   </div>
   <div class="stats">
     <div class="stat"><div class="v">4</div><div class="l">POI</div></div>
@@ -191,12 +192,12 @@ window.APP_TYPES = {"viewpoint": {"emoji": "\ud83c\udfd4\ufe0f", "label": "Panor
     if (mapVisible) {
       mapEl.classList.remove('collapsed');
       toggleBtn.setAttribute('title', 'Nascondi mappa');
-      toggleBtn.innerHTML = '&#x25B2; Nascondi mappa';
+      toggleBtn.innerHTML = '&#x25B2;Mappa';
       setTimeout(function() { map.invalidateSize(); }, 310);
     } else {
       mapEl.classList.add('collapsed');
       toggleBtn.setAttribute('title', 'Mostra mappa');
-      toggleBtn.innerHTML = '&#x25BC; Mostra mappa';
+      toggleBtn.innerHTML = '&#x25BC;Mappa';
     }
   });
 })();
