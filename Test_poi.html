@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>POI Puglia-Matera (4 punti)</title>
+<title>Test (4 punti)</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -53,7 +53,7 @@ body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
   <div class="hdr">
     <div>
       <h1>&#x1F6B4; POI Puglia &middot; Matera</h1>
-      <p>Generato il 07/03/2026 15:26 &middot; entro 1 km</p>
+      <p>Generato il 07/03/2026 15:36 &middot; entro 1 km</p>
     </div>
     <button id="map-toggle" title="Nascondi mappa">&#x25B2;Mappa</button>
   </div>
@@ -155,8 +155,21 @@ window.APP_TYPES = {"viewpoint": {"emoji": "\ud83c\udfd4\ufe0f", "label": "Panor
         body.appendChild(nm); body.appendChild(mt); body.appendChild(ds);
         row.appendChild(ico); row.appendChild(body);
         row.addEventListener("click", function() {
-          map.setView([p.lat, p.lon], 16);
-          m.openPopup();
+          // Reopen map if collapsed (mobile)
+          if (mapEl.classList.contains("collapsed")) {
+            mapEl.classList.remove("collapsed");
+            toggleBtn.innerHTML = "&#x25B2;Mappa";
+            toggleBtn.setAttribute("title", "Nascondi mappa");
+            mapVisible = true;
+            setTimeout(function() {
+              map.invalidateSize();
+              map.setView([p.lat, p.lon], 16);
+              m.openPopup();
+            }, 320);
+          } else {
+            map.setView([p.lat, p.lon], 16);
+            m.openPopup();
+          }
         });
         list.appendChild(row);
       })(visible[j]);
