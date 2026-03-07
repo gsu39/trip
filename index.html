@@ -1,8 +1,316 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-<meta charset="UTF-8">
-<title> Trips </title>
-<a href="Test_poi.html">Prova</a>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BICIAMICI</title>
+  <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Nunito:wght@400;600;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --sky: #0ea5e9;
+      --sun: #fbbf24;
+      --grass: #22c55e;
+      --coral: #f97316;
+      --lavender: #a78bfa;
+      --pink: #ec4899;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      font-family: 'Nunito', sans-serif;
+      background: linear-gradient(160deg, #e0f2fe 0%, #fef9c3 40%, #dcfce7 100%);
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* Animated background bubbles */
+    .bubble {
+      position: fixed;
+      border-radius: 50%;
+      opacity: 0.15;
+      animation: floatBubble linear infinite;
+      pointer-events: none;
+      z-index: 0;
+    }
+    @keyframes floatBubble {
+      0%   { transform: translateY(110vh) scale(0.8); }
+      100% { transform: translateY(-20vh) scale(1.2); }
+    }
+
+    /* Road strip decoration */
+    .road {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: 60px;
+      background: #334155;
+      z-index: 0;
+    }
+    .road::before {
+      content: '';
+      position: absolute;
+      top: 50%; left: 0; right: 0;
+      height: 6px;
+      background: repeating-linear-gradient(90deg, #fbbf24 0 60px, transparent 60px 120px);
+      transform: translateY(-50%);
+      animation: roadMove 2s linear infinite;
+    }
+    @keyframes roadMove {
+      from { background-position: 0 0; }
+      to   { background-position: 120px 0; }
+    }
+
+    /* Bike rolling on road */
+    .bike-container {
+      position: fixed;
+      bottom: 10px;
+      z-index: 1;
+      animation: bikeRide 12s linear infinite;
+    }
+    @keyframes bikeRide {
+      from { left: -120px; }
+      to   { left: calc(100% + 120px); }
+    }
+    .bike {
+      font-size: 52px;
+      filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.3));
+      animation: bikeWobble 0.4s ease-in-out infinite alternate;
+    }
+    @keyframes bikeWobble {
+      from { transform: rotate(-2deg); }
+      to   { transform: rotate(2deg); }
+    }
+
+    /* Page wrapper */
+    .page {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px 100px;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+      margin-bottom: 50px;
+      animation: dropIn 0.8s cubic-bezier(0.34,1.56,0.64,1) both;
+    }
+    @keyframes dropIn {
+      from { opacity: 0; transform: translateY(-60px) scale(0.8); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .title {
+      font-family: 'Pacifico', cursive;
+      font-size: clamp(3rem, 10vw, 6rem);
+      line-height: 1;
+      background: linear-gradient(135deg, var(--coral) 0%, var(--sun) 40%, var(--grass) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      filter: drop-shadow(3px 3px 0px rgba(0,0,0,0.12));
+      letter-spacing: -1px;
+    }
+
+    .subtitle {
+      margin-top: 12px;
+      font-size: clamp(1rem, 3vw, 1.5rem);
+      font-weight: 800;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: #475569;
+      position: relative;
+    }
+    .subtitle::before,
+    .subtitle::after {
+      content: '🚴';
+      margin: 0 10px;
+      font-size: 1.1em;
+    }
+
+    .divider {
+      margin: 18px auto 0;
+      width: 80px;
+      height: 5px;
+      border-radius: 99px;
+      background: linear-gradient(90deg, var(--sky), var(--grass), var(--sun), var(--coral));
+    }
+
+    /* Buttons grid */
+    .buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      width: 100%;
+      max-width: 420px;
+    }
+
+    .trip-btn {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 20px 28px;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+      text-decoration: none;
+      font-family: 'Nunito', sans-serif;
+      font-size: 1.25rem;
+      font-weight: 900;
+      color: #fff;
+      overflow: hidden;
+      transition: transform 0.18s cubic-bezier(0.34,1.56,0.64,1),
+                  box-shadow 0.18s ease;
+      animation: slideIn 0.6s cubic-bezier(0.34,1.56,0.64,1) both;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.3);
+    }
+
+    .trip-btn:nth-child(1) { animation-delay: 0.15s; background: linear-gradient(135deg, #f97316, #fbbf24); }
+    .trip-btn:nth-child(2) { animation-delay: 0.28s; background: linear-gradient(135deg, #0ea5e9, #22c55e); }
+    .trip-btn:nth-child(3) { animation-delay: 0.41s; background: linear-gradient(135deg, #a78bfa, #ec4899); }
+    .trip-btn:nth-child(4) { animation-delay: 0.54s; background: linear-gradient(135deg, #22c55e, #0ea5e9); }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-50px) scale(0.9); }
+      to   { opacity: 1; transform: translateX(0) scale(1); }
+    }
+
+    .trip-btn::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.2), transparent 60%);
+      pointer-events: none;
+    }
+
+    .trip-btn:hover {
+      transform: translateY(-4px) scale(1.03);
+      box-shadow: 0 14px 35px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.3);
+    }
+    .trip-btn:active {
+      transform: translateY(0) scale(0.98);
+      box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+    }
+
+    .btn-icon {
+      font-size: 2rem;
+      flex-shrink: 0;
+      filter: drop-shadow(1px 2px 3px rgba(0,0,0,0.2));
+    }
+
+    .btn-text {
+      display: flex;
+      flex-direction: column;
+      text-align: left;
+    }
+    .btn-label {
+      font-size: 1.3rem;
+      font-weight: 900;
+      line-height: 1;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    .btn-sub {
+      font-size: 0.78rem;
+      font-weight: 600;
+      opacity: 0.85;
+      letter-spacing: 0.06em;
+      margin-top: 3px;
+    }
+
+    .btn-arrow {
+      margin-left: auto;
+      font-size: 1.4rem;
+      opacity: 0.7;
+      transition: transform 0.2s, opacity 0.2s;
+    }
+    .trip-btn:hover .btn-arrow {
+      transform: translateX(6px);
+      opacity: 1;
+    }
+
+    /* Footer note */
+    .footer-note {
+      margin-top: 36px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #94a3b8;
+      text-align: center;
+      animation: fadeUp 1s 0.8s both;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+  </style>
 </head>
+<body>
+
+  <!-- Floating background bubbles -->
+  <div class="bubble" style="width:180px;height:180px;background:var(--sky);left:5%;animation-duration:14s;animation-delay:0s;"></div>
+  <div class="bubble" style="width:120px;height:120px;background:var(--sun);left:25%;animation-duration:18s;animation-delay:3s;"></div>
+  <div class="bubble" style="width:200px;height:200px;background:var(--grass);left:60%;animation-duration:12s;animation-delay:1s;"></div>
+  <div class="bubble" style="width:90px;height:90px;background:var(--coral);left:80%;animation-duration:20s;animation-delay:6s;"></div>
+  <div class="bubble" style="width:150px;height:150px;background:var(--lavender);left:45%;animation-duration:16s;animation-delay:9s;"></div>
+
+  <!-- Rolling road + bike -->
+  <div class="road"></div>
+  <div class="bike-container">
+    <div class="bike">🚴</div>
+  </div>
+
+  <div class="page">
+    <header class="header">
+      <h1 class="title">BICIAMICI</h1>
+      <p class="subtitle">I NOSTRI VIAGGI</p>
+      <div class="divider"></div>
+    </header>
+
+    <nav class="buttons">
+      <a class="trip-btn" href="Puglia_Matera_poi.html">
+        <span class="btn-icon">🏔️</span>
+        <span class="btn-text">
+          <span class="btn-label">PUGLIA</span>
+          <span class="btn-sub">Apri il resoconto</span>
+        </span>
+        <span class="btn-arrow">→</span>
+      </a>
+
+      <a class="trip-btn" href="viaggio2.html">
+        <span class="btn-icon">🌊</span>
+        <span class="btn-text">
+          <span class="btn-label">Viaggio 2</span>
+          <span class="btn-sub">Apri il resoconto</span>
+        </span>
+        <span class="btn-arrow">→</span>
+      </a>
+
+      <a class="trip-btn" href="viaggio3.html">
+        <span class="btn-icon">🌄</span>
+        <span class="btn-text">
+          <span class="btn-label">Viaggio 3</span>
+          <span class="btn-sub">Apri il resoconto</span>
+        </span>
+        <span class="btn-arrow">→</span>
+      </a>
+
+      <a class="trip-btn" href="viaggio4.html">
+        <span class="btn-icon">🌿</span>
+        <span class="btn-text">
+          <span class="btn-label">Viaggio 4</span>
+          <span class="btn-sub">Apri il resoconto</span>
+        </span>
+        <span class="btn-arrow">→</span>
+      </a>
+    </nav>
+
+    <p class="footer-note">🗺️ Seleziona un viaggio per aprirlo</p>
+  </div>
+
+</body>
 </html>
