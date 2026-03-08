@@ -32,11 +32,17 @@ body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
         font-size: 0.7rem; cursor: pointer; appearance: none; -webkit-appearance: none; }
 #list { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .item { padding: 10px 12px; border-bottom: 1px solid #0f3460; cursor: pointer;
-        display: flex; gap: 8px; align-items: flex-start; }
+        display: flex; gap: 8px; align-items: flex-start; transition: background 0.15s; }
+.item.selected { background: rgba(233,69,96,0.18); border-left: 3px solid #e94560; padding-left: 9px; }
 .ico   { font-size: 1.1rem; flex-shrink: 0; }
 .iname { font-size: 0.78rem; font-weight: 600; line-height: 1.3; }
 .imeta { font-size: 0.67rem; color: #888; }
 .idist { font-size: 0.67rem; color: #4ecca3; }
+.inav  { display: none; margin-left: auto; flex-shrink: 0; align-self: center;
+         background: #e94560; border: none; border-radius: 50%; width: 28px; height: 28px;
+         font-size: 0.85rem; cursor: pointer; color: white; text-decoration: none;
+         align-items: center; justify-content: center; }
+.item.selected .inav { display: flex; }
 @media (max-width: 600px) {
   body { flex-direction: column; }
   #sidebar { width: 100%; flex: 1; min-height: 0; border-right: none; border-bottom: 1px solid #0f3460; display: flex; flex-direction: column; }
@@ -53,7 +59,7 @@ body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
   <div class="hdr">
     <div>
       <h1>&#x1F6B4; Puglia Matera</h1>
-      <p>Generato il 07/03/2026 16:30 &middot; entro 1 km</p>
+      <p>Generato il 08/03/2026 10:23 &middot; entro 1 km</p>
     </div>
     <button id="map-toggle" title="Nascondi mappa">&#x25B2;Mappa</button>
   </div>
@@ -125,9 +131,20 @@ window.APP_TYPES = {"viewpoint": {"emoji": "\ud83c\udfd4\ufe0f", "label": "Panor
     return s;
   }
 
+  var selectedRow = null;
+
+  function selectPOI(row, m, p) {
+    // Deselect previous
+    if (selectedRow) selectedRow.classList.remove("selected");
+    selectedRow = row;
+    row.classList.add("selected");
+    row.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
   function render() {
     markers.forEach(function(m) { m.remove(); });
     markers = [];
+    selectedRow = null;
     var list    = document.getElementById("list");
     var counter = document.getElementById("vis-count");
     list.innerHTML = "";
@@ -142,19 +159,38 @@ window.APP_TYPES = {"viewpoint": {"emoji": "\ud83c\udfd4\ufe0f", "label": "Panor
                   .bindPopup(makePopupHTML(p))
                   .addTo(map);
         markers.push(m);
+
         var row  = document.createElement("div");  row.className  = "item";
         var ico  = document.createElement("div");  ico.className  = "ico";
-        var body = document.createElement("div");
+        var body = document.createElement("div");  body.style.flex = "1"; body.style.minWidth = "0";
         var nm   = document.createElement("div");  nm.className   = "iname";
         var mt   = document.createElement("div");  mt.className   = "imeta";
         var ds   = document.createElement("div");  ds.className   = "idist";
+
+        // Navigate button (Apple Maps) — visible only when row is selected
+        var nav  = document.createElement("a");
+        nav.className = "inav";
+        nav.href      = "https://maps.apple.com/?ll=" + p.lat + "," + p.lon
+                      + "&q=" + encodeURIComponent(p.name) + "&dirflg=w";
+        nav.target    = "_blank";
+        nav.title     = "Naviga con Apple Maps";
+        nav.innerHTML = "&#x27A1;";
+        nav.addEventListener("click", function(e) { e.stopPropagation(); });
+
         ico.textContent = p.emoji;
         nm.textContent  = p.name;
         mt.textContent  = p.label;
         ds.textContent  = p.dist + " m dal percorso";
         body.appendChild(nm); body.appendChild(mt); body.appendChild(ds);
-        row.appendChild(ico); row.appendChild(body);
+        row.appendChild(ico); row.appendChild(body); row.appendChild(nav);
+
+        // Marker click → highlight row + scroll
+        m.on("click", function() {
+          selectPOI(row, m, p);
+        });
+
         row.addEventListener("click", function() {
+          selectPOI(row, m, p);
           // Reopen map if collapsed (mobile)
           if (mapEl.classList.contains("collapsed")) {
             mapEl.classList.remove("collapsed");
