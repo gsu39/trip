@@ -8,7 +8,7 @@ Creates a list of POI along a GPX travel, with an interactive viewer.
 GPX POI Extractor è uno script Python standalone (nessuna libreria esterna) che, dato un file GPX, estrae automaticamente i punti di interesse culturali lungo il percorso interrogando l'API Overpass (OpenStreetMap).
 
 ## Come funziona:
-Divide il tracciato in segmenti da ~40 km e invia una query Overpass per ciascuno, rispettando i rate limit con backoff automatico su errore 429
+Divide il tracciato in segmenti da ~40 km e invia una query Overpass per ciascuno, rispettando i rate limit con backoff automatico su errore 429. 
 Filtra i risultati con calcolo Haversine punto-per-punto, tenendo solo i POI entro 1 km dalla traccia
 
 Ignora i POI senza nome e le opere d'arte generiche (artwork)
@@ -16,7 +16,7 @@ Ignora i POI senza nome e le opere d'arte generiche (artwork)
 Cerca: punti panoramici, musei, gallerie, attrazioni, monumenti, siti storici (castelli, rovine, siti archeologici, abbazie, torri…)
 
 ## Output generati (nome derivato automaticamente dal file GPX):
-GPX — contiene solo i POI (waypoints) non la traccia; importabile su Garmin, Komoot, OsmAnd
+GPX — contiene solo i POI (waypoints) non la traccia; importabile su Garmin, Adze, Avenue
 
 CSV — apribile con Excel/LibreOffice
 
