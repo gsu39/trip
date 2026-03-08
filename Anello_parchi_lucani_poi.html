@@ -17,7 +17,7 @@ body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
   color: #4ecca3; padding: 4px 8px; font-size: 0.72rem; cursor: pointer;
   -webkit-appearance: none; appearance: none; border-radius: 4px;
   white-space: nowrap; flex-shrink: 0; }
-.hdr { padding: 12px 14px; background: #0f3460; flex-shrink: 0; }
+.hdr { padding: 12px 14px; background: #0f3460; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .hdr h1 { font-size: 0.95rem; color: #e94560; }
 .hdr p  { font-size: 0.72rem; color: #aaa; margin-top: 3px; }
 .stats { padding: 8px 12px; border-bottom: 1px solid #0f3460; flex-shrink: 0;
@@ -32,11 +32,21 @@ body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
         font-size: 0.7rem; cursor: pointer; appearance: none; -webkit-appearance: none; }
 #list { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .item { padding: 10px 12px; border-bottom: 1px solid #0f3460; cursor: pointer;
-        display: flex; gap: 8px; align-items: flex-start; }
+        display: flex; gap: 8px; align-items: flex-start; transition: background 0.15s; }
+.item.selected { background: rgba(233,69,96,0.18); border-left: 3px solid #e94560; padding-left: 9px; }
 .ico   { font-size: 1.1rem; flex-shrink: 0; }
 .iname { font-size: 0.78rem; font-weight: 600; line-height: 1.3; }
 .imeta { font-size: 0.67rem; color: #888; }
 .idist { font-size: 0.67rem; color: #4ecca3; }
+#loc-btn { background: transparent; border: 1px solid #4ecca3; border-radius: 50%;
+  color: #4ecca3; width: 28px; height: 28px; font-size: 0.9rem; cursor: pointer;
+  -webkit-appearance: none; appearance: none; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+.inav  { display: none; margin-left: auto; flex-shrink: 0; align-self: center;
+         background: #e94560; border: none; border-radius: 50%; width: 28px; height: 28px;
+         font-size: 0.85rem; cursor: pointer; color: white; text-decoration: none;
+         align-items: center; justify-content: center; }
+.item.selected .inav { display: flex; }
 @media (max-width: 600px) {
   body { flex-direction: column; }
   #sidebar { width: 100%; flex: 1; min-height: 0; border-right: none; border-bottom: 1px solid #0f3460; display: flex; flex-direction: column; }
@@ -44,7 +54,6 @@ body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
   #map { height: 50vh; flex: none; transition: height 0.3s ease; }
   #map.collapsed { height: 0 !important; min-height: 0; overflow: hidden; }
   #map-toggle { display: inline-block; }
-  .hdr { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 }
 </style>
 </head>
@@ -53,9 +62,12 @@ body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
   <div class="hdr">
     <div>
       <h1>&#x1F6B4; Anello parchi lucani</h1>
-      <p>Generato il 07/03/2026 17:04 &middot; entro 1 km</p>
+      <p>Generato il 08/03/2026 11:33 &middot; entro 1 km</p>
     </div>
-    <button id="map-toggle" title="Nascondi mappa">&#x25B2;Mappa</button>
+    <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+      <button id="loc-btn" title="Mostra posizione">&#x25CE;</button>
+      <button id="map-toggle" title="Nascondi mappa">&#x25B2;Mappa</button>
+    </div>
   </div>
   <div class="stats">
     <div class="stat"><div class="v">165</div><div class="l">POI</div></div>
@@ -125,9 +137,20 @@ window.APP_TYPES = {"viewpoint": {"emoji": "\ud83c\udfd4\ufe0f", "label": "Panor
     return s;
   }
 
+  var selectedRow = null;
+
+  function selectPOI(row, m, p) {
+    // Deselect previous
+    if (selectedRow) selectedRow.classList.remove("selected");
+    selectedRow = row;
+    row.classList.add("selected");
+    row.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
   function render() {
     markers.forEach(function(m) { m.remove(); });
     markers = [];
+    selectedRow = null;
     var list    = document.getElementById("list");
     var counter = document.getElementById("vis-count");
     list.innerHTML = "";
@@ -142,19 +165,38 @@ window.APP_TYPES = {"viewpoint": {"emoji": "\ud83c\udfd4\ufe0f", "label": "Panor
                   .bindPopup(makePopupHTML(p))
                   .addTo(map);
         markers.push(m);
+
         var row  = document.createElement("div");  row.className  = "item";
         var ico  = document.createElement("div");  ico.className  = "ico";
-        var body = document.createElement("div");
+        var body = document.createElement("div");  body.style.flex = "1"; body.style.minWidth = "0";
         var nm   = document.createElement("div");  nm.className   = "iname";
         var mt   = document.createElement("div");  mt.className   = "imeta";
         var ds   = document.createElement("div");  ds.className   = "idist";
+
+        // Navigate button (Apple Maps) — visible only when row is selected
+        var nav  = document.createElement("a");
+        nav.className = "inav";
+        nav.href      = "https://maps.apple.com/?ll=" + p.lat + "," + p.lon
+                      + "&q=" + encodeURIComponent(p.name) + "&dirflg=w";
+        nav.target    = "_blank";
+        nav.title     = "Naviga con Apple Maps";
+        nav.innerHTML = "&#x27A1;";
+        nav.addEventListener("click", function(e) { e.stopPropagation(); });
+
         ico.textContent = p.emoji;
         nm.textContent  = p.name;
         mt.textContent  = p.label;
         ds.textContent  = p.dist + " m dal percorso";
         body.appendChild(nm); body.appendChild(mt); body.appendChild(ds);
-        row.appendChild(ico); row.appendChild(body);
+        row.appendChild(ico); row.appendChild(body); row.appendChild(nav);
+
+        // Marker click → highlight row + scroll
+        m.on("click", function() {
+          selectPOI(row, m, p);
+        });
+
         row.addEventListener("click", function() {
+          selectPOI(row, m, p);
           // Reopen map if collapsed (mobile)
           if (mapEl.classList.contains("collapsed")) {
             mapEl.classList.remove("collapsed");
@@ -195,6 +237,75 @@ window.APP_TYPES = {"viewpoint": {"emoji": "\ud83c\udfd4\ufe0f", "label": "Panor
   });
 
   render();
+
+  // Geolocation — current position
+  var locationMarker  = null;
+  var locationCircle  = null;
+  var locationWatcher = null;
+
+  function updateLocation(e) {
+    var latlng   = e.latlng;
+    var accuracy = e.accuracy;
+    if (locationMarker) {
+      locationMarker.setLatLng(latlng);
+      locationCircle.setLatLng(latlng).setRadius(accuracy);
+    } else {
+      locationCircle = L.circle(latlng, {
+        radius: accuracy, color: "#4ecca3", fillColor: "#4ecca3",
+        fillOpacity: 0.15, weight: 1
+      }).addTo(map);
+      locationMarker = L.circleMarker(latlng, {
+        radius: 7, color: "white", weight: 2,
+        fillColor: "#4ecca3", fillOpacity: 1
+      }).addTo(map);
+    }
+  }
+
+  var locBtn = document.getElementById("loc-btn");
+  var locTracking = false;
+  locBtn.addEventListener("click", function() {
+    if (!navigator.geolocation) {
+      alert("Geolocalizzazione non supportata da questo browser.");
+      return;
+    }
+    if (locTracking) {
+      // Stop tracking
+      if (locationWatcher !== null) navigator.geolocation.clearWatch(locationWatcher);
+      if (locationMarker)  { locationMarker.remove();  locationMarker  = null; }
+      if (locationCircle)  { locationCircle.remove();  locationCircle  = null; }
+      locTracking = false;
+      locBtn.style.background  = "transparent";
+      locBtn.style.color       = "#4ecca3";
+      locBtn.title             = "Mostra posizione";
+    } else {
+      // Start tracking
+      locTracking = true;
+      locBtn.style.background  = "#4ecca3";
+      locBtn.style.color       = "#111";
+      locBtn.title             = "Nascondi posizione";
+      locationWatcher = navigator.geolocation.watchPosition(
+        function(pos) {
+          var e = {
+            latlng:   L.latLng(pos.coords.latitude, pos.coords.longitude),
+            accuracy: pos.coords.accuracy
+          };
+          updateLocation(e);
+          // Pan to position on first fix
+          if (!locationMarker || locationMarker._firstFix === undefined) {
+            map.setView(e.latlng, map.getZoom());
+            if (locationMarker) locationMarker._firstFix = true;
+          }
+        },
+        function(err) {
+          locTracking = false;
+          locBtn.style.background = "transparent";
+          locBtn.style.color      = "#4ecca3";
+          alert("Errore geolocalizzazione: " + err.message);
+        },
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+      );
+    }
+  });
 
   // Map toggle — only active on mobile (button visible via CSS media query)
   var mapEl     = document.getElementById('map');
