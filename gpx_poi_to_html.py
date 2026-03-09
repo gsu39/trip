@@ -546,6 +546,8 @@ def main():
                         help="Mostra solo i POI entro questa distanza dalla traccia (filtra il GPX)")
     parser.add_argument("--nav", choices=["APPLE", "GOOGLE"], default="APPLE",
                         help="Navigatore per il pulsante ➡️ (default: APPLE)")
+    parser.add_argument("--track", metavar="PERCORSO.GPX", default=None,
+                        help="GPX originale da usare come tracciato (utile se il GPX arricchito non contiene <trk>)")
     args = parser.parse_args()
 
     gpx_file = args.gpx_file
@@ -560,14 +562,43 @@ def main():
     title, track, pois = parse_enriched_gpx(gpx_file)
 
     if not track:
-        print("❌ Nessun trackpoint trovato nel file GPX.")
-        sys.exit(1)
+        if args.track:
+            print(f"   ⚠️  Nessun tracciato nel GPX arricchito — uso {args.track}")
+            from gpx_poi_to_html import parse_enriched_gpx as _peg
+            # Parse original GPX for track only
+            import xml.etree.ElementTree as _ET
+            _tree = _ET.parse(args.track)
+            _root = _tree.getroot()
+            _ns = _root.tag.split("}")[0].strip("{") if "}" in _root.tag else ""
+            _trkpt = f"{{{_ns}}}trkpt" if _ns else "trkpt"
+            track = [[float(pt.get("lat")), float(pt.get("lon"))]
+                     for pt in _root.findall(f".//{_trkpt}")
+                     if pt.get("lat") and pt.get("lon")]
+            print(f"   Tracciato da file originale: {len(track)} punti")
+        if not track:
+            print("❌ Nessun trackpoint trovato. Usa --track PERCORSO_ORIGINALE.gpx")
+            sys.exit(1)
 
     # Optional distance filter
     if args.dist is not None:
         before = len(pois)
         pois = [p for p in pois if p["dist_m"] <= args.dist]
         print(f"   Filtro distanza: {args.dist} m → {len(pois)}/{before} POI mantenuti")
+
+    # Sort POIs by progressive position along track
+    cum_dist = [0.0]
+    for k in range(1, len(track)):
+        cum_dist.append(cum_dist[-1] + haversine(track[k-1][0], track[k-1][1], track[k][0], track[k][1]))
+
+    def track_progress(p):
+        best_d, best_k = float("inf"), 0
+        for k, (tlat, tlon) in enumerate(track):
+            d = haversine(p["lat"], p["lon"], tlat, tlon)
+            if d < best_d:
+                best_d = d; best_k = k
+        return cum_dist[best_k]
+
+    pois.sort(key=track_progress)
 
     dist_km = round(total_distance_km(track))
     print(f"   Titolo:       {title}")
