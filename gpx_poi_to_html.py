@@ -159,7 +159,7 @@ def total_distance_km(track):
 # ─────────────────────────────────────────────
 # ESPORTAZIONE HTML
 # ─────────────────────────────────────────────
-def export_html(pois, track, filepath, title="POI", nav="APPLE"):
+def export_html(pois, track, filepath, title="POI", nav="APPLE", near=5000):
     track_dec = [[round(p[0], 6), round(p[1], 6)] for p in track[::10]]
     poi_list  = [{
         "lat":   p["lat"],
@@ -195,6 +195,7 @@ def export_html(pois, track, filepath, title="POI", nav="APPLE"):
         "window.APP_TRACK = " + json.dumps(track_dec)  + ";\n" +
         "window.APP_POIS  = " + json.dumps(poi_list)   + ";\n" +
         "window.APP_TYPES = " + json.dumps(types_dict) + ";\n" +
+        "window.APP_NEAR  = " + str(near)              + ";\n" +
         nav_js
     )
 
@@ -211,6 +212,12 @@ def export_html(pois, track, filepath, title="POI", nav="APPLE"):
   var TYPES     = window.APP_TYPES;
   var NAV_URL   = window.NAV_URL;
   var NAV_LABEL = window.NAV_LABEL;
+  var mapEl       = document.getElementById('map');
+  var NEAR_M      = window.APP_NEAR;
+  var nearActive  = false;
+  var nearFilter  = null;
+  var lastRenderLat = null;
+  var lastRenderLon = null;
 
   var map = L.map("map", {zoomControl: true});
   map.setView([APP_START_LAT, APP_START_LON], 8);
@@ -275,7 +282,12 @@ def export_html(pois, track, filepath, title="POI", nav="APPLE"):
     list.innerHTML = "";
     var visible = [];
     for (var i = 0; i < POIS.length; i++) {
-      if (active[POIS[i].type]) visible.push(POIS[i]);
+      if (!active[POIS[i].type]) continue;
+      if (nearFilter !== null) {
+        var d = geoDistM(POIS[i].lat, POIS[i].lon, nearFilter.lat, nearFilter.lon);
+        if (d > NEAR_M) continue;
+      }
+      visible.push(POIS[i]);
     }
     counter.textContent = visible.length;
     for (var j = 0; j < visible.length; j++) {
@@ -346,14 +358,22 @@ def export_html(pois, track, filepath, title="POI", nav="APPLE"):
 
   render();
 
-  // Geolocation
+  // Near — geolocation + proximity filter
   var locationMarker  = null;
   var locationCircle  = null;
   var locationWatcher = null;
 
-  function updateLocation(e) {
-    var latlng   = e.latlng;
-    var accuracy = e.accuracy;
+  function geoDistM(lat1, lon1, lat2, lon2) {
+    var R = 6371000;
+    var dLat = (lat2 - lat1) * Math.PI / 180;
+    var dLon = (lon2 - lon1) * Math.PI / 180;
+    var a = Math.sin(dLat/2)*Math.sin(dLat/2)
+          + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)
+          * Math.sin(dLon/2)*Math.sin(dLon/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  function updateLocationMarker(latlng, accuracy) {
     if (locationMarker) {
       locationMarker.setLatLng(latlng);
       locationCircle.setLatLng(latlng).setRadius(accuracy);
@@ -369,38 +389,68 @@ def export_html(pois, track, filepath, title="POI", nav="APPLE"):
     }
   }
 
+  function applyNearFilter(lat, lon, panMap) {
+    nearFilter = {lat: lat, lon: lon};
+    lastRenderLat = lat;
+    lastRenderLon = lon;
+    render();
+    if (panMap && !mapEl.classList.contains("collapsed")) {
+      // Fit map to visible markers
+      var bounds = [];
+      markers.forEach(function(m) { bounds.push(m.getLatLng()); });
+      if (bounds.length > 0) {
+        map.fitBounds(L.latLngBounds(bounds), {padding: [30, 30]});
+      } else {
+        map.setView([lat, lon], map.getZoom());
+      }
+    }
+  }
+
   var locBtn = document.getElementById("loc-btn");
-  var locTracking = false;
   locBtn.addEventListener("click", function() {
     if (!navigator.geolocation) {
       alert("Geolocalizzazione non supportata da questo browser.");
       return;
     }
-    if (locTracking) {
-      if (locationWatcher !== null) navigator.geolocation.clearWatch(locationWatcher);
+    if (nearActive) {
+      // Deactivate
+      if (locationWatcher !== null) { navigator.geolocation.clearWatch(locationWatcher); locationWatcher = null; }
       if (locationMarker)  { locationMarker.remove();  locationMarker  = null; }
       if (locationCircle)  { locationCircle.remove();  locationCircle  = null; }
-      locTracking = false;
+      nearActive    = false;
+      nearFilter    = null;
+      lastRenderLat = null;
+      lastRenderLon = null;
       locBtn.classList.remove("active");
-      locBtn.title = "Mostra posizione";
+      locBtn.title = "Filtra POI vicini";
+      render();
     } else {
-      locTracking = true;
+      // Activate — show full list until first fix
+      nearActive = true;
       locBtn.classList.add("active");
-      locBtn.title = "Nascondi posizione";
+      locBtn.title = "Disattiva filtro vicini";
       locationWatcher = navigator.geolocation.watchPosition(
         function(pos) {
-          var e = {
-            latlng:   L.latLng(pos.coords.latitude, pos.coords.longitude),
-            accuracy: pos.coords.accuracy
-          };
-          updateLocation(e);
-          if (!locationMarker || locationMarker._firstFix === undefined) {
-            map.setView(e.latlng, map.getZoom());
-            if (locationMarker) locationMarker._firstFix = true;
+          var lat = pos.coords.latitude;
+          var lon = pos.coords.longitude;
+          updateLocationMarker(L.latLng(lat, lon), pos.coords.accuracy);
+          var isFirstFix = (lastRenderLat === null);
+          if (isFirstFix) {
+            // First fix: always apply filter + pan map
+            applyNearFilter(lat, lon, true);
+          } else {
+            // Subsequent fixes: re-render only if moved > NEAR_M/10
+            var moved = geoDistM(lat, lon, lastRenderLat, lastRenderLon);
+            if (moved > NEAR_M / 10) {
+              applyNearFilter(lat, lon, false);
+            } else {
+              // Just update marker position, no re-render
+              updateLocationMarker(L.latLng(lat, lon), pos.coords.accuracy);
+            }
           }
         },
         function(err) {
-          locTracking = false;
+          nearActive = false;
           locBtn.classList.remove("active");
           var errMsg = err.message || "";
           var errCodes = {1:"Permesso negato (abilita la localizzazione in Impostazioni \\u2192 Privacy \\u2192 Siti web di Safari)",
@@ -413,7 +463,6 @@ def export_html(pois, track, filepath, title="POI", nav="APPLE"):
   });
 
   // Map toggle (mobile only)
-  var mapEl     = document.getElementById('map');
   var toggleBtn = document.getElementById('map-toggle');
   var mapVisible = true;
   toggleBtn.addEventListener('click', function() {
@@ -445,45 +494,49 @@ def export_html(pois, track, filepath, title="POI", nav="APPLE"):
     lines.append('<meta charset="UTF-8">')
     lines.append('<meta name="viewport" content="width=device-width, initial-scale=1.0">')
     lines.append('<title>' + title + ' (' + str(poi_count) + ' punti)</title>')
+    lines.append('<link rel="preconnect" href="https://fonts.googleapis.com">')
+    lines.append('<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>')
+    lines.append('<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@500&display=swap" rel="stylesheet">')
     lines.append('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>')
     lines.append('<style>')
     lines.append('* { box-sizing: border-box; margin: 0; padding: 0; }')
     lines.append('html { height: 100%; }')
-    lines.append('body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;')
-    lines.append('       background: #1a1a2e; color: #eee; display: flex; flex-direction: row; overflow: hidden; }')
-    lines.append('#sidebar { width: 300px; flex-shrink: 0; background: #16213e; display: flex;')
-    lines.append('           flex-direction: column; overflow: hidden; border-right: 1px solid #0f3460; }')
+    lines.append('body { height: 100%; font-family: "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;')
+    lines.append('       background: #1a1a2e; color: #2C3E35; display: flex; flex-direction: row; overflow: hidden; }')
+    lines.append('#sidebar { width: 300px; flex-shrink: 0; background: #F7F3EF; display: flex;')
+    lines.append('           flex-direction: column; overflow: hidden; border-right: 1px solid #E2DAD3; }')
     lines.append('#map { flex: 1; min-width: 0; min-height: 0; }')
-    lines.append('.hdr-btn { background: #0f3460; border: 1px solid #4ecca3;')
-    lines.append('  color: #4ecca3; padding: 4px 0; font-size: 0.72rem; cursor: pointer;')
+    lines.append('.hdr-btn { background: rgba(232,168,124,0.18); border: 1px solid rgba(232,168,124,0.55);')
+    lines.append('  color: #E8A87C; padding: 3px 0; font-size: 0.64rem; font-weight: 500; cursor: pointer;')
     lines.append('  -webkit-appearance: none; appearance: none; border-radius: 4px;')
-    lines.append('  white-space: nowrap; flex-shrink: 0; width: 58px; text-align: center; }')
+    lines.append('  white-space: nowrap; flex-shrink: 0; width: 50px; text-align: center; letter-spacing: 0.01em; }')
     lines.append('#map-toggle { display: none; }')
-    lines.append('.hdr { padding: 12px 14px; background: #0f3460; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; }')
-    lines.append('.hdr h1 { font-size: 0.95rem; color: #e94560; }')
-    lines.append('.hdr p  { font-size: 0.72rem; color: #aaa; margin-top: 3px; }')
-    lines.append('.stats { padding: 8px 12px; border-bottom: 1px solid #0f3460; flex-shrink: 0;')
-    lines.append('         display: flex; gap: 6px; }')
-    lines.append('.stat  { background: #0f3460; border-radius: 5px; padding: 6px 8px;')
-    lines.append('         text-align: center; flex: 1; }')
-    lines.append('.stat .v { font-size: 0.95rem; font-weight: 700; color: #4ecca3; }')
-    lines.append('.stat .l { font-size: 0.62rem; color: #888; }')
-    lines.append('.filters { padding: 8px 12px; border-bottom: 1px solid #0f3460; flex-shrink: 0;')
+    lines.append('.hdr { padding: 9px 12px 8px; background: #2C3E35; flex-shrink: 0; }')
+    lines.append('.hdr-row1 { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }')
+    lines.append('.hdr h1 { flex: 1; font-size: 0.82rem; font-weight: 600; color: #ffffff; letter-spacing: 0.01em;')
+    lines.append('  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1; }')
+    lines.append('.hdr-row2 { display: flex; align-items: center; background: rgba(0,0,0,0.18); border-radius: 5px; padding: 4px 0; }')
+    lines.append('.hchip { flex: 1; display: flex; align-items: baseline; justify-content: center; gap: 3px; position: relative; }')
+    lines.append('.hchip + .hchip::before { content:""; position: absolute; left:0; top:15%; height:70%; width:1px; background:rgba(255,255,255,0.1); }')
+    lines.append('.hchip .v { font-family: "DM Mono", monospace; font-size: 0.82rem; font-weight: 500; color: #E8A87C; line-height: 1; }')
+    lines.append('.hchip .l { font-size: 0.58rem; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.06em; }')
+    lines.append('.filters { padding: 7px 10px; border-bottom: 1px solid #E2DAD3; flex-shrink: 0; background: #EDE8E2;')
     lines.append('           display: flex; flex-wrap: wrap; gap: 5px; }')
     lines.append('.fbtn { padding: 4px 9px; border-radius: 20px; border: 1px solid;')
     lines.append('        font-size: 0.7rem; cursor: pointer; appearance: none; -webkit-appearance: none; }')
     lines.append('#list { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }')
-    lines.append('.item { padding: 10px 12px; border-bottom: 1px solid #0f3460; cursor: pointer;')
-    lines.append('        display: flex; gap: 8px; align-items: flex-start; transition: background 0.15s; }')
-    lines.append('.item.selected { background: rgba(233,69,96,0.18); border-left: 3px solid #e94560; padding-left: 9px; }')
+    lines.append('.item { padding: 9px 12px; border-bottom: 1px solid #E2DAD3; cursor: pointer;')
+    lines.append('        display: flex; gap: 8px; align-items: flex-start; transition: background 0.15s; background: #F7F3EF; }')
+    lines.append('.item.selected { background: rgba(232,168,124,0.15); border-left: 3px solid #E8A87C; padding-left: 9px; }')
     lines.append('.ico   { font-size: 1.1rem; flex-shrink: 0; }')
-    lines.append('.iname { font-size: 0.78rem; font-weight: 600; line-height: 1.3; }')
-    lines.append('.imeta { font-size: 0.67rem; color: #888; }')
-    lines.append('.idist { font-size: 0.67rem; color: #4ecca3; }')
-    lines.append('.idesc { display: none; font-size: 0.7rem; color: #bbb; margin-top: 5px; line-height: 1.45; border-top: 1px solid #0f3460; padding-top: 5px; }')
+    lines.append('.iname { font-size: 0.76rem; font-weight: 600; color: #2C3E35; line-height: 1.3; }')
+    lines.append('.imeta { font-size: 0.64rem; color: #8C7B70; }')
+    lines.append('.idist { font-size: 0.64rem; color: #6B9E8A; font-weight: 500; }')
+    lines.append('.idesc { display: none; font-size: 0.68rem; color: #8C7B70; margin-top: 4px; line-height: 1.4; border-top: 1px solid #E2DAD3; padding-top: 4px; }')
     lines.append('.item.selected .idesc { display: block; }')
     lines.append('#loc-btn { transition: background 0.2s, color 0.2s; }')
-    lines.append('#loc-btn.active { background: #4ecca3; color: #111; }')
+    lines.append('#loc-btn.active { background: #E8A87C; color: #2C3E35; border-color: #E8A87C; font-weight: 600; }')
+    lines.append('#map-toggle.active { background: #E8A87C; color: #2C3E35; border-color: #E8A87C; font-weight: 600; }')
     lines.append('.inav  { display: none; margin-left: auto; flex-shrink: 0; align-self: center;')
     lines.append('         background: #e94560; border: none; border-radius: 50%; width: 28px; height: 28px;')
     lines.append('         font-size: 0.85rem; cursor: pointer; color: white; text-decoration: none;')
@@ -491,7 +544,7 @@ def export_html(pois, track, filepath, title="POI", nav="APPLE"):
     lines.append('.item.selected .inav { display: flex; }')
     lines.append('@media (max-width: 600px) {')
     lines.append('  body { flex-direction: column; }')
-    lines.append('  #sidebar { width: 100%; flex: 1; min-height: 0; border-right: none; border-bottom: 1px solid #0f3460; display: flex; flex-direction: column; }')
+    lines.append('  #sidebar { width: 100%; flex: 1; min-height: 0; border-right: none; border-bottom: 1px solid #E2DAD3; display: flex; flex-direction: column; }')
     lines.append('  #list { flex: 1; min-height: 0; }')
     lines.append('  #map { height: 50vh; flex: none; transition: height 0.3s ease; }')
     lines.append('  #map.collapsed { height: 0 !important; min-height: 0; overflow: hidden; }')
@@ -502,19 +555,18 @@ def export_html(pois, track, filepath, title="POI", nav="APPLE"):
     lines.append('<body>')
     lines.append('<div id="sidebar">')
     lines.append('  <div class="hdr">')
-    lines.append('    <div>')
+    lines.append('    <div class="hdr-row1">')
     lines.append('      <h1>&#x1F6B4; ' + title + '</h1>')
-    lines.append('      <p>Generato il ' + now_str + ' &middot; entro 1 km</p>')
+    lines.append('      <div style="display:flex;gap:5px;flex-shrink:0">')
+    lines.append('        <button id="loc-btn" class="hdr-btn" title="Filtra POI vicini">&#x2299; Near</button>')
+    lines.append('        <button id="map-toggle" class="hdr-btn" title="Nascondi mappa">&#x25B2;Mappa</button>')
+    lines.append('      </div>')
     lines.append('    </div>')
-    lines.append('    <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">')
-    lines.append('      <button id="loc-btn" class="hdr-btn" title="Mostra posizione">&#x2299; You</button>')
-    lines.append('      <button id="map-toggle" class="hdr-btn" title="Nascondi mappa">&#x25B2;Mappa</button>')
+    lines.append('    <div class="hdr-row2">')
+    lines.append('      <div class="hchip"><span class="v">' + str(poi_count) + '</span><span class="l">POI</span></div>')
+    lines.append('      <div class="hchip"><span class="v" id="vis-count">' + str(poi_count) + '</span><span class="l">Visibili</span></div>')
+    lines.append('      <div class="hchip"><span class="v">' + str(total_km) + '</span><span class="l">Km</span></div>')
     lines.append('    </div>')
-    lines.append('  </div>')
-    lines.append('  <div class="stats">')
-    lines.append('    <div class="stat"><div class="v">' + str(poi_count) + '</div><div class="l">POI</div></div>')
-    lines.append('    <div class="stat"><div class="v" id="vis-count">' + str(poi_count) + '</div><div class="l">Visibili</div></div>')
-    lines.append('    <div class="stat"><div class="v">' + str(total_km)  + '</div><div class="l">Km</div></div>')
     lines.append('  </div>')
     lines.append('  <div class="filters" id="filters"></div>')
     lines.append('  <div id="list"></div>')
@@ -546,6 +598,9 @@ def main():
                         help="Mostra solo i POI entro questa distanza dalla traccia (filtra il GPX)")
     parser.add_argument("--nav", choices=["APPLE", "GOOGLE"], default="APPLE",
                         help="Navigatore per il pulsante ➡️ (default: APPLE)")
+    parser.add_argument("--near", type=int, default=5000,
+                        metavar="METRI",
+                        help="Raggio in metri per il pulsante Near (default: 5000)")
     args = parser.parse_args()
 
     gpx_file = args.gpx_file
@@ -589,11 +644,12 @@ def main():
     print(f"   Tracciato:    {len(track)} punti · {dist_km} km")
     print(f"   POI:          {len(pois)}")
     print(f"   Navigatore:   {args.nav}")
+    print(f"   Raggio Near:  {args.near} m")
 
     base     = os.path.splitext(gpx_file)[0]
     html_out = f"{base}.html"
 
-    export_html(pois, track, html_out, title=title, nav=args.nav)
+    export_html(pois, track, html_out, title=title, nav=args.nav, near=args.near)
     print(f"\n💾 HTML → {html_out}")
     print(f"\n🎉 Fatto! Apri {html_out} nel browser.\n")
 
