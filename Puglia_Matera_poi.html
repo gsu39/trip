@@ -14,9 +14,11 @@ body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
            flex-direction: column; overflow: hidden; border-right: 1px solid #0f3460; }
 #map { flex: 1; min-width: 0; min-height: 0; }
 .hdr-btn { background: #0f3460; border: 1px solid #4ecca3;
-  color: #4ecca3; padding: 4px 0; font-size: 0.72rem; cursor: pointer;
+  color: #4ecca3; cursor: pointer;
   -webkit-appearance: none; appearance: none; border-radius: 4px;
-  white-space: nowrap; flex-shrink: 0; width: 58px; text-align: center; }
+  flex-shrink: 0; width: 46px; height: 44px; padding: 0; overflow: hidden; }
+.hdr-btn .btn-ico { display: block; width: 100%; height: 24px; line-height: 24px; text-align: center; }
+.hdr-btn .btn-lbl { display: block; width: 100%; height: 16px; line-height: 16px; text-align: center; font-size: 0.6rem; }
 #map-toggle { display: none; }
 .hdr { padding: 12px 14px; background: #0f3460; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .hdr h1 { font-size: 0.95rem; color: #e94560; }
@@ -43,6 +45,7 @@ body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
 .item.selected .idesc { display: block; }
 #loc-btn { transition: background 0.2s, color 0.2s; }
 #loc-btn.active { background: #4ecca3; color: #111; }
+#map-toggle.active { background: #4ecca3; color: #111; }
 .inav  { display: none; margin-left: auto; flex-shrink: 0; align-self: center;
          background: #e94560; border: none; border-radius: 50%; width: 28px; height: 28px;
          font-size: 0.85rem; cursor: pointer; color: white; text-decoration: none;
@@ -63,12 +66,12 @@ body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
   <div class="hdr">
     <div>
       <h1>Puglia Matera</h1>
-      <p>Generato il 09/03/2026 16:45 &middot; entro 1 km</p>
+      <p>Generato il 09/03/2026 18:47 &middot; entro 1 km</p>
     </div>
     <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
-      <button id="loc-btn" class="hdr-btn" title="Filtra POI vicini">&#x2299; Near</button>
-      <button id="map-toggle" class="hdr-btn" title="Nascondi mappa">&#x25B2;Mappa</button>
-    </div>
+      <button id="loc-btn" class="hdr-btn" title="Filtra POI vicini"><span class="btn-ico"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 73.9258 98.7793" width="14" height="18"><path d="M73.9258 74.8535C73.9258 85.0586 58.6426 92.2363 37.0117 92.2363C15.332 92.2363 0 85.0586 0 74.8535C0 66.4078 10.6024 60.0556 26.6602 58.1715L26.6602 59.4727C26.6602 61.5469 26.7423 63.4603 26.9162 65.1936C16.3275 66.6803 9.0332 70.4751 9.0332 74.8535C9.0332 80.6152 21.2402 85.2539 36.9629 85.2539C52.6367 85.2539 64.8926 80.5664 64.8926 74.8535C64.8926 70.5032 57.5364 66.6804 46.9187 65.1898C47.0883 63.4575 47.168 61.5454 47.168 59.4727L47.168 58.1528C63.2824 60.0108 73.9258 66.378 73.9258 74.8535Z" fill="currentColor"/><path d="M52.2461 21.4844C52.2461 28.5156 47.5098 34.4727 41.0156 36.2793L41.0156 57.6172C41.0156 70.5566 38.7207 77.5879 36.9629 77.5879C35.1562 77.5879 32.8613 70.5078 32.8613 57.6172L32.8613 36.2793C26.3672 34.4238 21.6797 28.5156 21.6797 21.4844C21.6797 13.0371 28.4668 6.15234 36.9629 6.15234C45.459 6.15234 52.2461 13.0371 52.2461 21.4844ZM27.4414 17.1387C27.4414 19.9707 29.8828 22.4121 32.666 22.4121C35.5469 22.4121 37.8906 19.9707 37.8906 17.1387C37.8906 14.3066 35.5469 11.9141 32.666 11.9141C29.8828 11.9141 27.4414 14.3066 27.4414 17.1387Z" fill="currentColor"/></svg></span><span class="btn-lbl">Near</span></button>
+      <button id="map-toggle" class="hdr-btn" title="Mappa"><span class="btn-ico"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 81.1523 76.3184" width="19" height="18"><path d="M4.73633 74.8535C5.81055 74.8535 6.83594 74.5117 8.20312 73.7793L27.5391 63.4277L48.877 75.1465C50.3418 75.9277 51.9043 76.3184 53.418 76.3184C54.834 76.3184 56.25 75.9766 57.373 75.3418L77.5391 64.0137C79.9805 62.6465 81.1523 60.5469 81.1523 57.8125L81.1523 6.29883C81.1523 3.22266 79.4434 1.51367 76.3672 1.51367C75.3418 1.51367 74.2676 1.85547 72.9004 2.58789L52.5879 13.9648L31.5918 1.07422C30.4688 0.390625 29.1016 0.0488281 27.7344 0.0488281C26.3184 0.0488281 24.9023 0.390625 23.7305 1.07422L3.61328 12.4023C1.12305 13.7695 0 15.8691 0 18.5547L0 70.0684C0 73.1445 1.70898 74.8535 4.73633 74.8535ZM24.707 56.4453L8.05664 65.5273C7.86133 65.625 7.66602 65.7227 7.51953 65.7227C7.17773 65.7227 7.03125 65.5273 7.03125 65.1855L7.03125 20.3613C7.03125 19.4336 7.42188 18.75 8.30078 18.2129L23.3398 9.57031C23.8281 9.27734 24.2676 9.0332 24.707 8.74023ZM31.7871 57.1777L31.7871 9.7168C32.1777 9.96094 32.6172 10.2051 33.0078 10.4492L49.3652 20.4102L49.3652 66.8457C48.7793 66.5039 48.1934 66.2109 47.6074 65.8691ZM56.3965 67.6758L56.3965 19.9707L73.0957 10.8398C73.291 10.7422 73.4863 10.6445 73.6328 10.6445C73.9258 10.6445 74.0723 10.8398 74.0723 11.1816L74.0723 56.0547C74.0723 56.9824 73.7305 57.666 72.8516 58.2031L58.252 66.6016C57.666 66.9922 57.0312 67.334 56.3965 67.6758Z" fill="currentColor"/></svg></span><span class="btn-lbl">Mappa</span></button>
+  </div>
   </div>
   <div class="stats">
     <div class="stat"><div class="v">350</div><div class="l">POI</div></div>
@@ -350,20 +353,19 @@ window.NAV_URL   = function(p) { return "https://maps.apple.com/?ll="+p.lat+","+
   // Map toggle (mobile only)
   var toggleBtn = document.getElementById('map-toggle');
   var mapVisible = true;
+  toggleBtn.classList.add('active');
   toggleBtn.addEventListener('click', function() {
     mapVisible = !mapVisible;
     if (mapVisible) {
       mapEl.classList.remove('collapsed');
-      toggleBtn.setAttribute('title', 'Nascondi mappa');
-      toggleBtn.innerHTML = '&#x25B2;Mappa';
+      toggleBtn.classList.add('active');
       setTimeout(function() {
         map.invalidateSize();
         if (selectedRow) selectedRow.scrollIntoView({ behavior: "smooth", block: "nearest" });
       }, 310);
     } else {
       mapEl.classList.add('collapsed');
-      toggleBtn.setAttribute('title', 'Mostra mappa');
-      toggleBtn.innerHTML = '&#x25BC;Mappa';
+      toggleBtn.classList.remove('active');
     }
   });
 })();
