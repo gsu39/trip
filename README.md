@@ -140,6 +140,7 @@ python3 gpx_poi_to_html.py <nome>_poi.gpx [--dist METRI] [--nav APPLE|GOOGLE]
 | `<nome>_poi.gpx` | posizionale | — | File GPX prodotto dallo script 1 |
 | `--dist` | intero | — | Mostra solo i POI entro questa distanza (filtra senza riscaricare) |
 | `--nav` | `APPLE` o `GOOGLE` | `APPLE` | Navigatore per il pulsante ➡️ |
+| `--near` | intero | `5000` | Raggio in metri per il filtro di prossimità del pulsante ⊙ Near |
 
 #### Comportamento `--nav`
 
@@ -195,7 +196,7 @@ Cliccando una riga della lista **o** un marker sulla mappa:
 
 | Pulsante | Funzione |
 |---|---|
-| **⊙ You** | Attiva/disattiva il tracking della posizione attuale. Mostra un punto verde con cerchio di accuratezza che si aggiorna in tempo reale. Richiede HTTPS. Su iOS: *Impostazioni → Privacy → Localizzazione → Siti web di Safari → Durante l'uso* |
+| **⊙ Near** | Attiva il tracking GPS e filtra la lista ai soli POI entro il raggio `--near` (default 5000 m). Al primo fix GPS la lista si aggiorna e la mappa mostra solo i marker visibili. Gli aggiornamenti successivi scattano solo se ci si è spostati di più di `NEAR_M / 10` metri dal punto del render precedente. Disattivando il pulsante la lista torna completa. Richiede HTTPS. Su iOS: *Impostazioni → Privacy → Localizzazione → Siti web di Safari → Durante l'uso* |
 | **▲ Mappa** *(solo smartphone)* | Mostra o nasconde la mappa. Quando nascosta, la lista POI occupa l'intero schermo. Se c'è un POI selezionato, alla riapertura la lista vi scrolla automaticamente. |
 
 ### Layout responsive
