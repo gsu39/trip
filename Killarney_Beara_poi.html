@@ -22,14 +22,9 @@ body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
 #map-toggle { display: none; }
 .hdr { padding: 10px 14px; background: #0f3460; flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
 .hdr h1 { font-size: 0.95rem; color: #e94560; width: 100%; }
-.stats { padding: 8px 12px; border-bottom: 1px solid #0f3460; flex-shrink: 0;
-         display: flex; gap: 6px; }
-.stat  { background: #0f3460; border-radius: 5px; padding: 6px 8px;
-         text-align: center; flex: 1; }
-.stat .v { font-size: 0.95rem; font-weight: 700; color: #4ecca3; }
-.stat .l { font-size: 0.62rem; color: #888; }
 .filters { padding: 8px 12px; border-bottom: 1px solid #0f3460; flex-shrink: 0; overflow: visible;
            display: flex; flex-wrap: wrap; gap: 5px; align-content: flex-start; }
+#poi-count { font-size: 0.78rem; font-weight: 700; color: #4ecca3; flex: 1; white-space: nowrap; }
 .fbtn { padding: 4px 9px; border-radius: 20px; border: 1px solid;
         font-size: 0.7rem; cursor: pointer; appearance: none; -webkit-appearance: none; }
 #list { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
@@ -72,7 +67,8 @@ body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
 <body>
 <div id="sidebar">
   <div class="hdr">
-    <h1>Killarney Beara</h1>
+    <h1>Killarney Beara &mdash; 251 km</h1>
+    <span id="poi-count">POI <span id="vis-count">62</span>/62</span>
     <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
       <button id="find-btn" class="hdr-btn" title="Cerca per nome"><span class="btn-ico"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span><span class="btn-lbl">Find</span></button>
       <button id="center-btn" class="hdr-btn" title="Centra la mappa su tutti i POI"><span class="btn-ico"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="7"/><polyline points="9 5 12 2 15 5"/><line x1="12" y1="22" x2="12" y2="17"/><polyline points="15 19 12 22 9 19"/><line x1="2" y1="12" x2="7" y2="12"/><polyline points="5 9 2 12 5 15"/><line x1="22" y1="12" x2="17" y2="12"/><polyline points="19 15 22 12 19 9"/></svg></span><span class="btn-lbl">Center</span></button>
@@ -83,11 +79,6 @@ body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
   </div>
   <div id="search-bar">
     <input id="search-input" type="search" placeholder="Cerca nei nomi dei POI…" autocomplete="off"/>
-  </div>
-  <div class="stats">
-    <div class="stat"><div class="v">62</div><div class="l">POI</div></div>
-    <div class="stat"><div class="v" id="vis-count">62</div><div class="l">Visibili</div></div>
-    <div class="stat"><div class="v">251</div><div class="l">Km</div></div>
   </div>
   <div class="filters" id="filters"></div>
   <div id="list"></div>
@@ -389,14 +380,15 @@ window.NAV_URL   = function(p) { return "https://maps.apple.com/?ll="+p.lat+","+
 
   var centerBtn = document.getElementById("center-btn");
   centerBtn.addEventListener("click", function() {
-    if (!mapEl.classList.contains("collapsed")) {
-      var bounds = [];
-      markers.forEach(function(m) { bounds.push(m.getLatLng()); });
-      if (bounds.length > 0) {
-        map.fitBounds(L.latLngBounds(bounds), {padding: [30, 30]});
-      } else {
-        map.fitBounds(L.latLngBounds(TRACK.map(function(p) { return L.latLng(p[0], p[1]); })), {padding: [30, 30]});
-      }
+    map.invalidateSize();
+    var latlngs = markers.map(function(m) { return m.getLatLng(); });
+    if (latlngs.length === 0) {
+      latlngs = TRACK.map(function(p) { return L.latLng(p[0], p[1]); });
+    }
+    if (latlngs.length === 1) {
+      map.setView(latlngs[0], 14);
+    } else if (latlngs.length > 1) {
+      map.flyToBounds(L.latLngBounds(latlngs), {padding: [30, 30], duration: 0.6});
     }
   });
 
