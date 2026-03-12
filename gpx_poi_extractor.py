@@ -31,6 +31,7 @@ import sys
 import os
 import ssl
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Fix SSL su macOS (certificate verify failed)
 SSL_CONTEXT = ssl.create_default_context()
@@ -47,14 +48,12 @@ except ImportError:
 MAX_DIST_M       = 1000   # distanza massima dal percorso in metri
 SEGMENT_KM       = 40     # lunghezza segmento per query Overpass
 BUFFER_KM        = 1.3    # buffer bbox oltre il percorso
-PAUSE_BETWEEN_S  = 12     # pausa tra query (rispetta rate limit Overpass)
+PAUSE_BETWEEN_S  = 6      # pausa tra query Overpass principali
 OVERPASS_TIMEOUT = 60
 WIKI_MAX_CHARS   = 1000   # lunghezza massima estratto Wikipedia (nessun taglio per il GPX)
 
 OVERPASS_ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",
-    "https://overpass.kumi.systems/api/interpreter",
-    "https://overpass.openstreetmap.ru/api/interpreter",
 ]
 
 POI_TYPES = {
@@ -64,6 +63,7 @@ POI_TYPES = {
     "artwork":    ("🎨",  "Arte/Monumento",    "#E91E63"),
     "attraction": ("⭐",  "Attrazione",        "#2196F3"),
     "historic":   ("🏰",  "Sito storico",      "#795548"),
+    "komoot":     ("🚴",  "Komoot",            "#6AA84F"),
 }
 
 # ─────────────────────────────────────────────
@@ -76,25 +76,88 @@ def haversine(lat1, lon1, lat2, lon2):
     a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
     return R * 2 * math.asin(math.sqrt(min(1, a)))
 
-def dist_point_to_track(lat, lon, track, coarse_step=8):
-    best_dist = float('inf')
-    best_idx = 0
-    for i in range(0, len(track), coarse_step):
+def build_track_grid(track, cell_deg=0.01):
+    """Indice spaziale a griglia: mappa (row,col) -> lista di indici track.
+    cell_deg ~0.01° ≈ 700-1100m — copre abbondantemente MAX_DIST_M=1000m.
+    Costruzione O(N), lookup O(1) + scan della cella.
+    """
+    grid = {}
+    for i, (lat, lon) in enumerate(track):
+        key = (int(lat / cell_deg), int(lon / cell_deg))
+        grid.setdefault(key, []).append(i)
+    return grid
+
+def dist_point_to_track(lat, lon, track, grid, cell_deg=0.01):
+    """Distanza minima da (lat,lon) al track usando l'indice a griglia.
+    Controlla solo le celle adiacenti (3×3), poi fallback lineare se vuote.
+    """
+    row = int(lat / cell_deg)
+    col = int(lon / cell_deg)
+    candidates = []
+    for dr in (-1, 0, 1):
+        for dc in (-1, 0, 1):
+            candidates.extend(grid.get((row+dr, col+dc), []))
+    if not candidates:
+        candidates = range(len(track))   # fallback (rarissimo)
+    best = float('inf')
+    for i in candidates:
         d = haversine(lat, lon, track[i][0], track[i][1])
-        if d < best_dist:
-            best_dist = d
-            best_idx = i
-    start = max(0, best_idx - coarse_step)
-    end   = min(len(track) - 1, best_idx + coarse_step)
-    for i in range(start, end + 1):
-        d = haversine(lat, lon, track[i][0], track[i][1])
-        if d < best_dist:
-            best_dist = d
-    return best_dist
+        if d < best:
+            best = d
+    return best
 
 def total_distance_km(track):
     return sum(haversine(track[i-1][0], track[i-1][1], track[i][0], track[i][1])
                for i in range(1, len(track))) / 1000
+
+def parse_gpx_waypoints(filepath):
+    """
+    Legge i waypoint (<wpt>) presenti nel file GPX sorgente.
+    Restituisce una lista di dict compatibili con il formato POI.
+    """
+    tree = ET.parse(filepath)
+    root = tree.getroot()
+    ns = root.tag.split('}')[0].strip('{') if '}' in root.tag else ''
+
+    def find_text(el, tag):
+        child = el.find(f'{{{ns}}}{tag}') if ns else el.find(tag)
+        return child.text.strip() if child is not None and child.text else ''
+
+    waypoints = []
+    wpt_tag = f'{{{ns}}}wpt' if ns else 'wpt'
+    for wpt in root.findall(wpt_tag):
+        try:
+            lat = float(wpt.get('lat'))
+            lon = float(wpt.get('lon'))
+        except (TypeError, ValueError):
+            continue
+        name = find_text(wpt, 'name') or find_text(wpt, 'desc') or '(senza nome)'
+        if name == '(senza nome)':
+            continue
+        # Leggi tag noti dal GPX
+        tags = {}
+        for key in ('desc', 'cmt', 'type', 'sym'):
+            v = find_text(wpt, key)
+            if v:
+                tags[key] = v
+        # Cerca link (href)
+        link_tag = f'{{{ns}}}link' if ns else 'link'
+        link_el = wpt.find(link_tag)
+        if link_el is not None:
+            href = link_el.get('href', '')
+            if href:
+                tags['website'] = href
+        waypoints.append({
+            'osm_id':  f'wpt-{len(waypoints)}',
+            'lat':     lat,
+            'lon':     lon,
+            'type':    'komoot',
+            'name':    name,
+            'dist_m':  0,
+            'tags':    tags,
+        })
+    return waypoints
+
 
 # ─────────────────────────────────────────────
 # PARSING GPX
@@ -212,6 +275,137 @@ def get_name(tags):
     return "(senza nome)"
 
 # ─────────────────────────────────────────────
+# ARRICCHIMENTO WAYPOINT KOMOOT
+# ─────────────────────────────────────────────
+# Tag OSM utili da copiare sul waypoint se trovati
+_WPT_COPY_TAGS = (
+    "website", "contact:website", "url",
+    "phone", "contact:phone",
+    "opening_hours",
+    "wikipedia", "wikidata",
+    "description", "description:it", "description:en",
+    "fee", "cuisine", "stars", "rooms",
+    "operator", "brand",
+)
+
+def _name_similarity(a, b):
+    """Similarità semplice tra due nomi (0-1): parole in comune / parole totali."""
+    wa = set(a.lower().split())
+    wb = set(b.lower().split())
+    if not wa or not wb:
+        return 0.0
+    return len(wa & wb) / len(wa | wb)
+
+def _haversine_m(lat1, lon1, lat2, lon2):
+    R = 6371000
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+    return R * 2 * math.asin(math.sqrt(min(1, a)))
+
+def _fetch_json(url, timeout=6):
+    req = urllib.request.Request(url, headers={"User-Agent": "GPX-POI-Extractor/1.0"})
+    with urllib.request.urlopen(req, timeout=timeout, context=SSL_CONTEXT) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+def enrich_waypoint_overpass(wp, radius=100):
+    """Cerca nodi/way OSM entro `radius` m dal waypoint.
+    Se trova un elemento con nome simile, copia i tag utili.
+    Usa query_overpass() per retry/backoff automatico su 504/429.
+    Ritorna True se ha arricchito il waypoint."""
+    lat, lon = wp["lat"], wp["lon"]
+    query = (
+        f"[out:json][timeout:10];"
+        f"(node(around:{radius},{lat:.6f},{lon:.6f})[name];"
+        f" way(around:{radius},{lat:.6f},{lon:.6f})[name];);"
+        f"out center tags;"
+    )
+    try:
+        result = query_overpass(query, retries=3)
+    except Exception:
+        return False
+
+    best_score = 0.25         # soglia minima
+    best_tags  = None
+    best_dist  = float('inf')
+    for el in result.get("elements", []):
+        tags = el.get("tags", {})
+        osm_name = tags.get("name", "")
+        if not osm_name:
+            continue
+        score = _name_similarity(wp["name"], osm_name)
+        # coordinate elemento
+        if el["type"] == "node":
+            elat, elon = el.get("lat", lat), el.get("lon", lon)
+        else:
+            c = el.get("center", {})
+            elat, elon = c.get("lat", lat), c.get("lon", lon)
+        dist = _haversine_m(lat, lon, elat, elon)
+        # boost: se molto vicino (< 50m) abbassa la soglia
+        effective_score = score if dist > 50 else max(score, 0.2 if score > 0.15 else 0)
+        if effective_score > best_score or (effective_score == best_score and dist < best_dist):
+            best_score = effective_score
+            best_tags  = tags
+            best_dist  = dist
+
+    if not best_tags:
+        return False
+
+    enriched = False
+    for key in _WPT_COPY_TAGS:
+        if key in best_tags and key not in wp["tags"]:
+            # Normalizza website
+            if key in ("contact:website", "url") and "website" not in wp["tags"]:
+                wp["tags"]["website"] = best_tags[key]
+            elif key == "contact:phone" and "phone" not in wp["tags"]:
+                wp["tags"]["phone"] = best_tags[key]
+            else:
+                wp["tags"][key] = best_tags[key]
+            enriched = True
+    return enriched
+
+def enrich_waypoint_nominatim(wp, radius=300):
+    """Fallback: ricerca Nominatim per nome + coordinate.
+    Copia website e altri tag se trovati."""
+    name  = urllib.parse.quote(wp["name"])
+    lat, lon = wp["lat"], wp["lon"]
+    url = (
+        f"https://nominatim.openstreetmap.org/search"
+        f"?q={name}&format=json&limit=3&addressdetails=0&extratags=1"
+        f"&viewbox={lon-0.03:.4f},{lat+0.02:.4f},{lon+0.03:.4f},{lat-0.02:.4f}&bounded=1"
+    )
+    try:
+        results = _fetch_json(url, timeout=8)
+    except Exception:
+        return False
+
+    if not results:
+        return False
+
+    # Prendi il risultato con nome più simile
+    best_score = 0.3
+    best = None
+    for r in results:
+        score = _name_similarity(wp["name"], r.get("display_name", ""))
+        if score > best_score:
+            best_score = score
+            best = r
+
+    if not best:
+        return False
+
+    enriched = False
+    extra = best.get("extratags", {}) or {}
+    for key in _WPT_COPY_TAGS:
+        if key in extra and key not in wp["tags"]:
+            if key in ("contact:website", "url") and "website" not in wp["tags"]:
+                wp["tags"]["website"] = extra[key]
+            else:
+                wp["tags"][key] = extra[key]
+            enriched = True
+    return enriched
+
+# ─────────────────────────────────────────────
 # DESCRIZIONI
 # ─────────────────────────────────────────────
 def get_osm_description(tags):
@@ -253,22 +447,38 @@ def fetch_wikipedia_extract(wiki_tag, max_chars=WIKI_MAX_CHARS):
         return ""
 
 def enrich_descriptions(pois):
-    wiki_pois  = [(i, p) for i, p in enumerate(pois) if p["tags"].get("wikipedia")]
-    other_pois = [(i, p) for i, p in enumerate(pois) if not p["tags"].get("wikipedia")]
+    """Scarica descrizioni Wikipedia per tutti i POI che hanno il tag wikipedia
+    e non hanno ancora una descrizione. Completa con dati OSM per gli altri."""
+    wiki_pois  = [(i, p) for i, p in enumerate(pois)
+                  if p["tags"].get("wikipedia") and not p.get("desc")]
+    other_pois = [(i, p) for i, p in enumerate(pois)
+                  if not p["tags"].get("wikipedia") and not p.get("desc")]
 
+    WIKI_THREADS = 4
     if wiki_pois:
-        print(f"\n📖 Scarico descrizioni Wikipedia per {len(wiki_pois)} POI...")
-    for idx, (i, p) in enumerate(wiki_pois):
-        print(f"   {idx+1}/{len(wiki_pois)} {p['name'][:40]}", end="\r")
-        desc = fetch_wikipedia_extract(p["tags"]["wikipedia"])
-        pois[i]["desc"] = desc if desc else get_osm_description(p["tags"])
-        time.sleep(0.3)
+        print(f"\n📖 Scarico {len(wiki_pois)} descrizioni Wikipedia ({WIKI_THREADS} thread)...")
+        import threading
+        lock  = threading.Lock()
+        done  = [0]
+        total = len(wiki_pois)
+        def _fetch_one(item):
+            i, p = item
+            desc = fetch_wikipedia_extract(p["tags"]["wikipedia"])
+            result = desc if desc else get_osm_description(p["tags"])
+            with lock:
+                done[0] += 1
+                print(f"   {done[0]}/{total} {p['name'][:45]}", end="\r")
+            return i, result
+        with ThreadPoolExecutor(max_workers=WIKI_THREADS) as ex:
+            for i, desc in ex.map(_fetch_one, wiki_pois):
+                pois[i]["desc"] = desc
 
     for i, p in other_pois:
         pois[i]["desc"] = get_osm_description(p["tags"])
 
-    filled = sum(1 for p in pois if p.get("desc"))
-    print(f"\n   ✅ Descrizioni: {filled}/{len(pois)} POI con testo")
+    wiki_ok  = sum(1 for p in pois if p.get("desc") and p["tags"].get("wikipedia"))
+    osm_ok   = sum(1 for p in pois if p.get("desc") and not p["tags"].get("wikipedia"))
+    print(f"\n   ✅ Descrizioni: {wiki_ok} da Wikipedia, {osm_ok} da OSM")
     return pois
 
 # ─────────────────────────────────────────────
@@ -277,7 +487,7 @@ def enrich_descriptions(pois):
 def xml_esc(s):
     return str(s).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace('"',"&quot;")
 
-def export_gpx(pois, track, filepath, title="POI"):
+def export_gpx(pois, track, filepath, title="POI", km=None):
     """
     Genera un GPX con:
     - <trk> con il tracciato completo
@@ -285,6 +495,8 @@ def export_gpx(pois, track, filepath, title="POI"):
       contenente TUTTE le informazioni: desc, wikipedia, website, osm_id,
       dist_m, emoji, color, e tutti i tag OSM originali.
     """
+    if km is None:
+        km = round(total_distance_km(track)) if track else 0
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<gpx version="1.1" creator="GPX-POI-Extractor"',
@@ -294,17 +506,26 @@ def export_gpx(pois, track, filepath, title="POI"):
         f'    <name>{xml_esc(title)}</name>',
         f'    <desc>{len(pois)} POI entro {MAX_DIST_M} m dal percorso</desc>',
         f'    <time>{datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")}</time>',
+        f'    <extensions><poi:length_km>{km}</poi:length_km></extensions>',
         f'  </metadata>',
     ]
 
     # Waypoints (POI)
     for p in pois:
         cfg = POI_TYPES.get(p["type"], POI_TYPES["attraction"])
+        is_wpt   = p["type"] == "komoot"
+        has_wiki = bool(p["tags"].get("wikipedia", ""))
+        has_web  = bool(p["tags"].get("website", ""))
+        # <desc>: label+dist for OSM POI; always empty for waypoints (info in extensions)
+        desc_tag = "" if is_wpt else \
+                   (cfg[1] + (" — " + str(p["dist_m"]) + " m dal percorso" if p["dist_m"] > 0 else ""))
+        # <type>/<poi:type>: human label for waypoints, key for OSM POI
+        type_tag = cfg[1] if is_wpt else p["type"]
         lines += [
             f'  <wpt lat="{p["lat"]:.7f}" lon="{p["lon"]:.7f}">',
             f'    <name>{xml_esc(p["name"])}</name>',
-            f'    <desc>{xml_esc(cfg[1])} — {p["dist_m"]} m dal percorso</desc>',
-            f'    <type>{xml_esc(p["type"])}</type>',
+            f'    <desc>{xml_esc(desc_tag)}</desc>',
+            f'    <type>{xml_esc(type_tag)}</type>',
             f'    <extensions>',
             f'      <poi:type>{xml_esc(p["type"])}</poi:type>',
             f'      <poi:label>{xml_esc(cfg[1])}</poi:label>',
@@ -392,9 +613,15 @@ def main():
     print("📂 Parsing GPX...")
     track = parse_gpx(gpx_file)
     dist  = total_distance_km(track)
-    print(f"   {len(track)} trackpoint · {dist:.1f} km")
+    grid  = build_track_grid(track)
+    print(f"   {len(track)} trackpoint · {dist:.1f} km  (griglia: {len(grid)} celle)")
     print(f"   Start: {track[0][0]:.5f}, {track[0][1]:.5f}")
     print(f"   End:   {track[-1][0]:.5f}, {track[-1][1]:.5f}")
+
+    # Leggi waypoint dal GPX sorgente
+    gpx_waypoints = parse_gpx_waypoints(gpx_file)
+    if gpx_waypoints:
+        print(f"   📍 {len(gpx_waypoints)} waypoint trovati nel file GPX")
 
     bboxes = get_segment_bboxes(track)
     print(f"\n📦 {len(bboxes)} segmenti da interrogare (~{SEGMENT_KM} km ciascuno)")
@@ -417,7 +644,7 @@ def main():
                 lon = el.get("lon") or (el.get("center") or {}).get("lon")
                 if not lat or not lon:
                     continue
-                dist_m = dist_point_to_track(lat, lon, track)
+                dist_m = dist_point_to_track(lat, lon, track, grid)
                 if dist_m > MAX_DIST_M:
                     continue
                 tags = el.get("tags", {})
@@ -447,9 +674,16 @@ def main():
         cum_dist.append(cum_dist[-1] + haversine(track[k-1][0], track[k-1][1], track[k][0], track[k][1]))
 
     def track_progress(p):
+        row, col = int(p["lat"]/0.01), int(p["lon"]/0.01)
+        cands = []
+        for dr in (-1, 0, 1):
+            for dc in (-1, 0, 1):
+                cands.extend(grid.get((row+dr, col+dc), []))
+        if not cands:
+            cands = range(len(track))
         best_d, best_k = float("inf"), 0
-        for k, (tlat, tlon) in enumerate(track):
-            d = haversine(p["lat"], p["lon"], tlat, tlon)
+        for k in cands:
+            d = haversine(p["lat"], p["lon"], track[k][0], track[k][1])
             if d < best_d:
                 best_d = d; best_k = k
         return cum_dist[best_k]
@@ -488,6 +722,52 @@ def main():
         if counts[ptype]:
             print(f"   {cfg[0]}  {cfg[1]:<22} {counts[ptype]:>3}")
 
+    # Aggiungi waypoint GPX (Komoot) — arricchisci con OSM/Nominatim + Wikipedia
+    if gpx_waypoints:
+        print(f"\n🚴 Waypoint GPX ({len(gpx_waypoints)}) — arricchimento OSM/Wikipedia...")
+        wpt_seen_names = {p["name"].strip().lower() for p in all_pois}
+        added = []
+        osm_hits = wiki_hits = 0
+        # Overpass+Nominatim in sequenza (evita 504 da troppe query parallele)
+        # Wikipedia in parallelo (API diversa, nessun conflitto)
+        wp_candidates = [wp for wp in gpx_waypoints
+                         if wp["name"].strip().lower() not in wpt_seen_names]
+
+        for n, wp in enumerate(wp_candidates, 1):
+            print(f"   {n}/{len(wp_candidates)} {wp['name'][:40]}", end="\r")
+            if enrich_waypoint_overpass(wp):
+                osm_hits += 1
+            else:
+                if enrich_waypoint_nominatim(wp):
+                    osm_hits += 1
+            added.append(wp)
+            wpt_seen_names.add(wp["name"].strip().lower())
+            time.sleep(3)
+
+        # Wikipedia in parallelo sui waypoint senza tag wikipedia
+        def _wp_wiki(wp):
+            for lang in ("it", "en"):
+                url = (f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/"
+                       f"{urllib.parse.quote(wp['name'].replace(' ', '_'))}")
+                try:
+                    data = _fetch_json(url, timeout=6)
+                    if data.get("extract", "").strip():
+                        wp["tags"]["wikipedia"] = f"{lang}:{data.get('title', wp['name'])}"
+                        return True
+                except Exception:
+                    pass
+            return False
+
+        wiki_cands = [wp for wp in added if not wp["tags"].get("wikipedia")]
+        if wiki_cands:
+            with ThreadPoolExecutor(max_workers=4) as ex:
+                for wp, hit in zip(wiki_cands, ex.map(_wp_wiki, wiki_cands)):
+                    if hit: wiki_hits += 1
+
+        print(f"   ✅ {len(added)} waypoint aggiunti"
+              f" ({osm_hits} con dati OSM, {wiki_hits} con Wikipedia)")
+        all_pois.extend(added)
+
     # Enrich with descriptions
     all_pois = enrich_descriptions(all_pois)
 
@@ -500,7 +780,7 @@ def main():
     gpx_out = f"{base}_poi.gpx"
     csv_out = f"{base}_poi.csv"
 
-    export_gpx(all_pois, track, gpx_out, title=gpx_title)
+    export_gpx(all_pois, track, gpx_out, title=gpx_title, km=round(dist))
     print(f"\n💾 GPX  → {gpx_out}")
 
     export_csv(all_pois, csv_out)

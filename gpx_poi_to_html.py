@@ -32,6 +32,7 @@ POI_TYPES = {
     "artwork":    ("🎨",  "Arte/Monumento",    "#E91E63"),
     "attraction": ("⭐",  "Attrazione",        "#2196F3"),
     "historic":   ("🏰",  "Sito storico",      "#795548"),
+    "komoot":     ("🚴",  "Komoot",            "#6AA84F"),
 }
 
 POI_NS = "https://github.com/gpx-poi-extractor"
@@ -63,13 +64,22 @@ def parse_enriched_gpx(filepath):
         child = el.find(tag)
         return child.text.strip() if child is not None and child.text else default
 
-    # Title from metadata
+    # Title and km from metadata
     title = "POI"
+    gpx_km = None
     meta = root.find(gpx('metadata'))
     if meta is not None:
         n = meta.find(gpx('name'))
         if n is not None and n.text:
             title = n.text.strip()
+        meta_ext = meta.find(gpx('extensions'))
+        if meta_ext is not None:
+            lk = meta_ext.find(poi('length_km'))
+            if lk is not None and lk.text:
+                try:
+                    gpx_km = int(lk.text.strip())
+                except ValueError:
+                    pass
 
     # Track points
     track = []
@@ -90,6 +100,9 @@ def parse_enriched_gpx(filepath):
 
         name = text(wpt, gpx('name'), "(senza nome)")
         poi_type = text(wpt, gpx('type'), "attraction")
+        # Normalise: "Komoot" in <type> means komoot
+        if poi_type == "Komoot":
+            poi_type = "komoot"
 
         # Read extensions
         ext = wpt.find(gpx('extensions'))
@@ -140,7 +153,7 @@ def parse_enriched_gpx(filepath):
             "tags":      osm_tags,
         })
 
-    return title, track, pois
+    return title, track, pois, gpx_km
 
 # ─────────────────────────────────────────────
 # GEOMETRIA
@@ -159,7 +172,7 @@ def total_distance_km(track):
 # ─────────────────────────────────────────────
 # ESPORTAZIONE HTML
 # ─────────────────────────────────────────────
-def export_html(pois, track, filepath, title="POI", nav="APPLE", near=5000):
+def export_html(pois, track, filepath, title="POI", nav="APPLE", near=5000, gpx_km=None):
     track_dec = [[round(p[0], 6), round(p[1], 6)] for p in track[::10]]
     poi_list  = [{
         "lat":   p["lat"],
@@ -173,6 +186,8 @@ def export_html(pois, track, filepath, title="POI", nav="APPLE", near=5000):
         "wiki":  p["wiki"],
         "web":   p["web"],
         "desc":  p["desc"],
+        "phone": p["tags"].get("phone", p["tags"].get("contact:phone", "")),
+        "hours": p["tags"].get("opening_hours", ""),
     } for p in pois]
     types_dict = {k: {"emoji": v[0], "label": v[1], "color": v[2]} for k, v in POI_TYPES.items()}
 
@@ -238,13 +253,24 @@ def export_html(pois, track, filepath, title="POI", nav="APPLE", near=5000):
   var active  = {};
   Object.keys(TYPES).forEach(function(t) { active[t] = true; });
 
+  var _o = "<", _c = ">";  // prevent HTML parser from seeing tags in script
+
   function makeIcon(type) {
     var c = TYPES[type] || TYPES["attraction"];
+    var inner;
+    if (type === "komoot") {
+      inner = _o + "svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='14' height='14' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'" + _c
+            + _o + "circle cx='5.5' cy='17.5' r='3.5'/" + _c + _o + "circle cx='18.5' cy='17.5' r='3.5'/" + _c
+            + _o + "path d='M15 6h-5l-2 6h9l-2-6z'/" + _c + _o + "line x1='5.5' y1='17.5' x2='10' y2='6'/" + _c
+            + _o + "/svg" + _c;
+    } else {
+      inner = _o + "span style='font-size:13px;line-height:26px'" + _c + c.emoji + _o + "/span" + _c;
+    }
     return L.divIcon({
-      html: "<div style=\\"background:" + c.color + ";width:26px;height:26px;"
+      html: _o + "div style='background:" + c.color + ";width:26px;height:26px;"
           + "border-radius:50%;display:flex;align-items:center;justify-content:center;"
-          + "font-size:13px;border:2px solid white;box-shadow:0 2px 5px rgba(0,0,0,0.35)\\">"
-          + c.emoji + "</div>",
+          + "border:2px solid white;box-shadow:0 2px 5px rgba(0,0,0,0.35)'" + _c
+          + inner + _o + "/div" + _c,
       iconSize:   [26, 26],
       iconAnchor: [13, 13],
       className:  ""
@@ -252,16 +278,25 @@ def export_html(pois, track, filepath, title="POI", nav="APPLE", near=5000):
   }
 
   function makePopupHTML(p) {
-    var s = "<b>" + p.emoji + " " + p.name + "</b>"
-          + "<br><small style='color:#555'>" + p.label + "</small>"
-          + "<br><small style='color:#2a9d8f'>" + p.dist + " m dal percorso</small>";
+    var s = _o + "b" + _c + p.emoji + " " + p.name + _o + "/b" + _c
+          + _o + "br" + _c + _o + "small style='color:#555'" + _c + p.label + _o + "/small" + _c;
+    if (p.dist > 0) {
+      s += _o + "br" + _c + _o + "small style='color:#2a9d8f'" + _c + p.dist + " m dal percorso" + _o + "/small" + _c;
+    }
+    if (p.hours) {
+      s += _o + "br" + _c + _o + "small style='color:#888'" + _c + "🕐 " + p.hours + _o + "/small" + _c;
+    }
+    if (p.phone) {
+      s += _o + "br" + _c + _o + "a href='tel:" + p.phone + "' style='font-size:0.8em'" + _c + "📞 " + p.phone + _o + "/a" + _c;
+    }
     if (p.wiki) {
-      var wt = p.wiki.replace("it:", "");
-      s += "<br><a href='https://it.wikipedia.org/wiki/" + encodeURIComponent(wt)
-        +  "' target='_blank' style='font-size:0.8em'>Wikipedia</a>";
+      var wparts = p.wiki.indexOf(":") !== -1 ? p.wiki.split(":") : ["it", p.wiki];
+      var wlang = wparts[0], wtitle = wparts.slice(1).join(":");
+      s += _o + "br" + _c + _o + "a href='https://" + wlang + ".wikipedia.org/wiki/" + encodeURIComponent(wtitle)
+        +  "' target='_blank' style='font-size:0.8em'" + _c + "Wikipedia" + _o + "/a" + _c;
     }
     if (p.web) {
-      s += "<br><a href='" + p.web + "' target='_blank' style='font-size:0.8em'>Sito web</a>";
+      s += _o + "br" + _c + _o + "a href='" + p.web + "' target='_blank' style='font-size:0.8em'" + _c + "Sito web" + _o + "/a" + _c;
     }
     return s;
   }
@@ -353,10 +388,44 @@ def export_html(pois, track, filepath, title="POI", nav="APPLE", near=5000):
         ico.textContent = p.emoji;
         nm.textContent  = p.name;
         mt.textContent  = p.label;
-        ds.textContent  = p.dist + " m dal percorso";
+        if (p.dist > 0) ds.textContent = p.dist + " m dal percorso";
         if (p.desc) dc.textContent = p.desc;
         body.appendChild(nm); body.appendChild(mt); body.appendChild(ds);
         if (p.desc) body.appendChild(dc);
+        if (p.hours) {
+          var hr = document.createElement("div");
+          hr.className = "ihours";
+          hr.textContent = "🕐 " + p.hours;
+          body.appendChild(hr);
+        }
+        if (p.phone) {
+          var ph = document.createElement("a");
+          ph.className = "iphone";
+          ph.href = "tel:" + p.phone;
+          ph.textContent = "📞 " + p.phone;
+          ph.addEventListener("click", function(e) { e.stopPropagation(); });
+          body.appendChild(ph);
+        }
+        if (p.wiki) {
+          var wparts = p.wiki.indexOf(":") !== -1 ? p.wiki.split(":") : ["it", p.wiki];
+          var wlang = wparts[0], wtitle = wparts.slice(1).join(":");
+          var wlink = document.createElement("a");
+          wlink.className = "iwiki";
+          wlink.href = "https://" + wlang + ".wikipedia.org/wiki/" + encodeURIComponent(wtitle);
+          wlink.target = "_blank";
+          wlink.textContent = "Wikipedia";
+          wlink.addEventListener("click", function(e) { e.stopPropagation(); });
+          body.appendChild(wlink);
+        }
+        if (p.web) {
+          var wblink = document.createElement("a");
+          wblink.className = "iwiki";
+          wblink.href = p.web;
+          wblink.target = "_blank";
+          wblink.textContent = "Sito web";
+          wblink.addEventListener("click", function(e) { e.stopPropagation(); });
+          body.appendChild(wblink);
+        }
         row.appendChild(ico); row.appendChild(body); row.appendChild(nav);
 
         m.on("click", function() {
@@ -622,6 +691,14 @@ def export_html(pois, track, filepath, title="POI", nav="APPLE", near=5000):
     lines.append('.idist { font-size: 0.67rem; color: #4ecca3; }')
     lines.append('.idesc { display: none; font-size: 0.7rem; color: #bbb; margin-top: 5px; line-height: 1.45; border-top: 1px solid #0f3460; padding-top: 5px; }')
     lines.append('.item.selected .idesc { display: block; }')
+    lines.append('.iwiki { display: none; font-size: 0.72rem; color: #4a9eda; margin-top: 4px; text-decoration: none; }')
+    lines.append('.iwiki:hover { text-decoration: underline; }')
+    lines.append('.item.selected .iwiki { display: inline-block; margin-right: 8px; }')
+    lines.append('.ihours { display: none; font-size: 0.72rem; color: #aaa; margin-top: 3px; }')
+    lines.append('.item.selected .ihours { display: block; }')
+    lines.append('.iphone { display: none; font-size: 0.72rem; color: #4a9eda; margin-top: 3px; text-decoration: none; }')
+    lines.append('.iphone:hover { text-decoration: underline; }')
+    lines.append('.item.selected .iphone { display: block; }')
     lines.append('#loc-btn { transition: background 0.2s, color 0.2s; }')
     lines.append('#loc-btn.active { background: #4ecca3; color: #111; }')
     lines.append('#find-btn { transition: background 0.2s, color 0.2s; }')
@@ -709,7 +786,7 @@ def main():
     print("=" * 50)
 
     print("📂 Parsing GPX arricchito...")
-    title, track, pois = parse_enriched_gpx(gpx_file)
+    title, track, pois, gpx_km = parse_enriched_gpx(gpx_file)
 
     if not track:
         print("❌ Nessun trackpoint trovato nel file GPX.")
@@ -746,7 +823,7 @@ def main():
     base     = os.path.splitext(gpx_file)[0]
     html_out = f"{base}.html"
 
-    export_html(pois, track, html_out, title=title, nav=args.nav, near=args.near)
+    export_html(pois, track, html_out, title=title, nav=args.nav, near=args.near, gpx_km=gpx_km)
     print(f"\n💾 HTML → {html_out}")
     print(f"\n🎉 Fatto! Apri {html_out} nel browser.\n")
 
