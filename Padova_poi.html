@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Padova (99 punti)</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { height: 100%; }
+body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+       background: #1a1a2e; color: #eee; display: flex; flex-direction: row; overflow: hidden; }
+#sidebar { width: 300px; flex-shrink: 0; background: #16213e; display: flex;
+           flex-direction: column; overflow: hidden; border-right: 1px solid #0f3460; }
+#map { flex: 1; min-width: 0; min-height: 0; }
+.hdr-btn { background: #0f3460; border: 1px solid #4ecca3;
+  color: #4ecca3; cursor: pointer;
+  -webkit-appearance: none; appearance: none; border-radius: 4px;
+  flex-shrink: 0; width: 46px; height: 44px; padding: 0; overflow: hidden; }
+.hdr-btn .btn-ico { display: block; width: 100%; height: 24px; line-height: 24px; text-align: center; }
+.hdr-btn .btn-lbl { display: block; width: 100%; height: 16px; line-height: 16px; text-align: center; font-size: 0.6rem; }
+#map-toggle { display: none; }
+.hdr { padding: 10px 14px; background: #0f3460; flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
+.hdr h1 { font-size: 0.95rem; color: #e94560; width: 100%; }
+.filters { padding: 8px 12px; border-bottom: 1px solid #0f3460; flex-shrink: 0; overflow: visible;
+           display: flex; flex-wrap: wrap; gap: 5px; align-content: flex-start; }
+#poi-count { font-size: 0.78rem; font-weight: 700; color: #4ecca3; flex: 1; white-space: nowrap; }
+.fbtn { padding: 4px 9px; border-radius: 20px; border: 1px solid;
+        font-size: 0.7rem; cursor: pointer; appearance: none; -webkit-appearance: none; }
+#list { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.item { padding: 10px 12px; border-bottom: 1px solid #0f3460; cursor: pointer;
+        display: flex; gap: 8px; align-items: flex-start; transition: background 0.15s; }
+.item.selected { background: rgba(233,69,96,0.18); border-left: 3px solid #e94560; padding-left: 9px; }
+.ico   { font-size: 1.1rem; flex-shrink: 0; }
+.iname { font-size: 0.78rem; font-weight: 600; line-height: 1.3; }
+.imeta { font-size: 0.67rem; color: #888; }
+.idist { font-size: 0.67rem; color: #4ecca3; }
+.idesc { display: none; font-size: 0.7rem; color: #bbb; margin-top: 5px; line-height: 1.45; border-top: 1px solid #0f3460; padding-top: 5px; }
+.item.selected .idesc { display: block; }
+.iwiki { display: none; font-size: 0.72rem; color: #4a9eda; margin-top: 4px; text-decoration: none; }
+.iwiki:hover { text-decoration: underline; }
+.item.selected .iwiki { display: inline-block; margin-right: 8px; }
+.ihours { display: none; font-size: 0.72rem; color: #aaa; margin-top: 3px; }
+.item.selected .ihours { display: block; }
+.iphone { display: none; font-size: 0.72rem; color: #4a9eda; margin-top: 3px; text-decoration: none; }
+.iphone:hover { text-decoration: underline; }
+.item.selected .iphone { display: block; }
+#loc-btn { transition: background 0.2s, color 0.2s; }
+#loc-btn.active { background: #4ecca3; color: #111; }
+#find-btn { transition: background 0.2s, color 0.2s; }
+#find-btn.active { background: #4ecca3; color: #111; }
+#web-btn { transition: background 0.2s, color 0.2s; }
+#web-btn.active { background: #4ecca3; color: #111; }
+#map-toggle.active { background: #4ecca3; color: #111; }
+.inav  { display: none; margin-left: auto; flex-shrink: 0; align-self: center;
+         background: #e94560; border: none; border-radius: 50%; width: 28px; height: 28px;
+         font-size: 0.85rem; cursor: pointer; color: white; text-decoration: none;
+         align-items: center; justify-content: center; }
+.item.selected .inav { display: flex; }
+#search-bar { display: none; padding: 8px 12px; background: #0f3460; border-bottom: 1px solid #0f3460; flex-shrink: 0; }
+#search-bar.open { display: block; }
+#search-input { width: 100%; background: #1a1a2e; border: 1px solid #4ecca3; border-radius: 6px; color: #eee; padding: 7px 10px; font-size: 0.82rem; outline: none; -webkit-appearance: none; appearance: none; }
+#search-input::placeholder { color: #556; }
+.fbtn.hidden { display: none; }
+@media (max-width: 600px) {
+  body { flex-direction: column; }
+  #sidebar { width: 100%; flex: 1; min-height: 0; border-right: none; border-bottom: 1px solid #0f3460; display: flex; flex-direction: column; }
+  #list { flex: 1; min-height: 0; }
+  #map { height: 50vh; flex: none; transition: height 0.3s ease; }
+  #map.collapsed { height: 0 !important; min-height: 0; overflow: hidden; }
+  #map-toggle { display: inline-block; }
+}
+</style>
+</head>
+<body>
+<div id="sidebar">
+  <div class="hdr">
+    <h1>Padova &mdash; 7 km</h1>
+    <span id="poi-count">POI <span id="vis-count">99</span>/99</span>
+    <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+      <button id="find-btn" class="hdr-btn" title="Cerca per nome"><span class="btn-ico"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span><span class="btn-lbl">Find</span></button>
+      <button id="center-btn" class="hdr-btn" title="Centra la mappa su tutti i POI"><span class="btn-ico"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="7"/><polyline points="9 5 12 2 15 5"/><line x1="12" y1="22" x2="12" y2="17"/><polyline points="15 19 12 22 9 19"/><line x1="2" y1="12" x2="7" y2="12"/><polyline points="5 9 2 12 5 15"/><line x1="22" y1="12" x2="17" y2="12"/><polyline points="19 15 22 12 19 9"/></svg></span><span class="btn-lbl">Center</span></button>
+      <button id="loc-btn" class="hdr-btn" title="Filtra POI vicini"><span class="btn-ico"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 73.9258 98.7793" width="14" height="18"><path d="M73.9258 74.8535C73.9258 85.0586 58.6426 92.2363 37.0117 92.2363C15.332 92.2363 0 85.0586 0 74.8535C0 66.4078 10.6024 60.0556 26.6602 58.1715L26.6602 59.4727C26.6602 61.5469 26.7423 63.4603 26.9162 65.1936C16.3275 66.6803 9.0332 70.4751 9.0332 74.8535C9.0332 80.6152 21.2402 85.2539 36.9629 85.2539C52.6367 85.2539 64.8926 80.5664 64.8926 74.8535C64.8926 70.5032 57.5364 66.6804 46.9187 65.1898C47.0883 63.4575 47.168 61.5454 47.168 59.4727L47.168 58.1528C63.2824 60.0108 73.9258 66.378 73.9258 74.8535Z" fill="currentColor"/><path d="M52.2461 21.4844C52.2461 28.5156 47.5098 34.4727 41.0156 36.2793L41.0156 57.6172C41.0156 70.5566 38.7207 77.5879 36.9629 77.5879C35.1562 77.5879 32.8613 70.5078 32.8613 57.6172L32.8613 36.2793C26.3672 34.4238 21.6797 28.5156 21.6797 21.4844C21.6797 13.0371 28.4668 6.15234 36.9629 6.15234C45.459 6.15234 52.2461 13.0371 52.2461 21.4844ZM27.4414 17.1387C27.4414 19.9707 29.8828 22.4121 32.666 22.4121C35.5469 22.4121 37.8906 19.9707 37.8906 17.1387C37.8906 14.3066 35.5469 11.9141 32.666 11.9141C29.8828 11.9141 27.4414 14.3066 27.4414 17.1387Z" fill="currentColor"/></svg></span><span class="btn-lbl">Near</span></button>
+      <button id="web-btn" class="hdr-btn" title="Solo POI con link Wikipedia o sito web"><span class="btn-ico"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3c-2.5 3-4 5.5-4 9s1.5 6 4 9"/><path d="M12 3c2.5 3 4 5.5 4 9s-1.5 6-4 9"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/></svg></span><span class="btn-lbl">Web</span></button>
+      <button id="map-toggle" class="hdr-btn" title="Mappa"><span class="btn-ico"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 81.1523 76.3184" width="19" height="18"><path d="M4.73633 74.8535C5.81055 74.8535 6.83594 74.5117 8.20312 73.7793L27.5391 63.4277L48.877 75.1465C50.3418 75.9277 51.9043 76.3184 53.418 76.3184C54.834 76.3184 56.25 75.9766 57.373 75.3418L77.5391 64.0137C79.9805 62.6465 81.1523 60.5469 81.1523 57.8125L81.1523 6.29883C81.1523 3.22266 79.4434 1.51367 76.3672 1.51367C75.3418 1.51367 74.2676 1.85547 72.9004 2.58789L52.5879 13.9648L31.5918 1.07422C30.4688 0.390625 29.1016 0.0488281 27.7344 0.0488281C26.3184 0.0488281 24.9023 0.390625 23.7305 1.07422L3.61328 12.4023C1.12305 13.7695 0 15.8691 0 18.5547L0 70.0684C0 73.1445 1.70898 74.8535 4.73633 74.8535ZM24.707 56.4453L8.05664 65.5273C7.86133 65.625 7.66602 65.7227 7.51953 65.7227C7.17773 65.7227 7.03125 65.5273 7.03125 65.1855L7.03125 20.3613C7.03125 19.4336 7.42188 18.75 8.30078 18.2129L23.3398 9.57031C23.8281 9.27734 24.2676 9.0332 24.707 8.74023ZM31.7871 57.1777L31.7871 9.7168C32.1777 9.96094 32.6172 10.2051 33.0078 10.4492L49.3652 20.4102L49.3652 66.8457C48.7793 66.5039 48.1934 66.2109 47.6074 65.8691ZM56.3965 67.6758L56.3965 19.9707L73.0957 10.8398C73.291 10.7422 73.4863 10.6445 73.6328 10.6445C73.9258 10.6445 74.0723 10.8398 74.0723 11.1816L74.0723 56.0547C74.0723 56.9824 73.7305 57.666 72.8516 58.2031L58.252 66.6016C57.666 66.9922 57.0312 67.334 56.3965 67.6758Z" fill="currentColor"/></svg></span><span class="btn-lbl">Map</span></button>
+    </div>
+  </div>
+  <div id="search-bar">
+    <input id="search-input" type="search" placeholder="Cerca nei nomi dei POI…" autocomplete="off"/>
+  </div>
+  <div class="filters" id="filters"></div>
+  <div id="list"></div>
+</div>
+<div id="map"></div>
+<script id="app-data">
+window.APP_TRACK = [[45.411915, 11.879541], [45.411312, 11.879896], [45.410423, 11.879473], [45.410143, 11.880471], [45.408404, 11.881358], [45.407487, 11.884552], [45.407897, 11.882687], [45.408952, 11.878901], [45.408949, 11.877763], [45.407996, 11.876093], [45.407192, 11.875269], [45.406916, 11.872754], [45.406185, 11.87107], [45.406496, 11.872598], [45.406859, 11.876006], [45.407265, 11.87621], [45.407357, 11.876181], [45.407141, 11.876647], [45.406993, 11.87728], [45.405998, 11.878569], [45.401818, 11.879959], [45.401305, 11.880236], [45.399769, 11.879872], [45.399022, 11.879549], [45.398659, 11.880676], [45.398934, 11.879462], [45.399553, 11.879641], [45.3976, 11.878507], [45.396635, 11.880058], [45.39707, 11.878774], [45.398201, 11.877756], [45.399717, 11.877135], [45.400135, 11.875789], [45.403202, 11.875597], [45.406033, 11.876632]];
+window.APP_POIS  = [{"lat": 45.4118604, "lon": 11.8794911, "name": "Cappella degli Scrovegni", "type": "museum", "dist": 7, "label": "Museo", "emoji": "\ud83c\udfdb\ufe0f", "color": "#9B59B6", "wiki": "it:Cappella degli Scrovegni", "web": "", "desc": "La cappella degli Scrovegni \u00e8 una chiesa di Padova, in precedenza cappella privata, divenuta parte dei Musei civici di Padova. Ospita un noto ciclo di affreschi di Giotto dei primi anni del XIV secolo, considerato uno dei capolavori dell'arte occidentale.\nLa navata \u00e8 lunga 29,88\u00a0m, larga 8,41\u00a0m e alta 12,65\u00a0m; l'abside \u00e8 costituito da una prima parte a pianta quadrata, profonda 4,49\u00a0m e larga 4,31\u00a0m, e da una successiva, a forma poligonale a cinque lati, profonda 2,57\u00a0m e coperta da cinque unghiature nervate. La superficie affrescata \u00e8 di circa 700\u00a0m\u00b2, compresi i circa 180\u00a0m\u00b2 della volta dipinta quasi solo di azzurro.\nDal 2021 fa parte dei patrimoni dell'umanit\u00e0 UNESCO nel sito dei cicli di affreschi del XIV secolo di Padova.\nI dipinti all'interno della cappella degli Scrovegni diedero il via a una rivoluzione pittorica che si svilupp\u00f2 in tutto l'arco del Trecento e che influenz\u00f2 la storia della pittura.", "phone": "+39 049 8204551", "hours": ""}, {"lat": 45.4163926, "lon": 11.8759568, "name": "Torrione della Gatta", "type": "attraction", "dist": 563, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "https://www.muradipadova.it/lic/le-mura-rinascimentali/i-bastioni/bastione-della-gatta.html", "desc": "", "phone": "", "hours": ""}, {"lat": 45.4149087, "lon": 11.8750204, "name": "Porta Codalunga", "type": "historic", "dist": 478, "label": "Sito storico", "emoji": "\ud83c\udff0", "color": "#795548", "wiki": "", "web": "", "desc": "City gate", "phone": "", "hours": ""}, {"lat": 45.412184, "lon": 11.8781177, "name": "Museo della Natura e dell\u2019Uomo", "type": "museum", "dist": 111, "label": "Museo", "emoji": "\ud83c\udfdb\ufe0f", "color": "#9B59B6", "wiki": "", "web": "", "desc": "Biglietto: yes \u00b7 Gestito da: Universit\u00e0 di Padova", "phone": "", "hours": ""}, {"lat": 45.4186851, "lon": 11.8729538, "name": "Baluardo Moro I", "type": "attraction", "dist": 904, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "", "desc": "", "phone": "", "hours": ""}, {"lat": 45.4163622, "lon": 11.8754037, "name": "Rotonda", "type": "historic", "dist": 583, "label": "Sito storico", "emoji": "\ud83c\udff0", "color": "#795548", "wiki": "", "web": "", "desc": "Tower", "phone": "", "hours": ""}, {"lat": 45.4131468, "lon": 11.8797699, "name": "Torrione dell'Arena", "type": "attraction", "dist": 126, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "", "desc": "", "phone": "", "hours": ""}, {"lat": 45.4110114, "lon": 11.8799864, "name": "Musei Civici agli Eremitani", "type": "museum", "dist": 24, "label": "Museo", "emoji": "\ud83c\udfdb\ufe0f", "color": "#9B59B6", "wiki": "it:Musei civici agli Eremitani", "web": "", "desc": "I Musei civici di Padova, noti anche come Musei civici agli Eremitani, sono un complesso museale situato in piazza Eremitani nella citt\u00e0 di Padova.", "phone": "", "hours": ""}, {"lat": 45.4114324, "lon": 11.8781539, "name": "Museo Bottacin", "type": "museum", "dist": 87, "label": "Museo", "emoji": "\ud83c\udfdb\ufe0f", "color": "#9B59B6", "wiki": "", "web": "https://padovamusei.it/it/musei/museo-bottacin/il-museo-bottacin", "desc": "", "phone": "+39 049 8205669", "hours": ""}, {"lat": 45.4115744, "lon": 11.8781728, "name": "Museo di arti applicate e decorative", "type": "museum", "dist": 96, "label": "Museo", "emoji": "\ud83c\udfdb\ufe0f", "color": "#9B59B6", "wiki": "", "web": "", "desc": "", "phone": "", "hours": ""}, {"lat": 45.4114831, "lon": 11.8790137, "name": "Arena", "type": "attraction", "dist": 59, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "", "desc": "Archaeological site", "phone": "", "hours": ""}, {"lat": 45.4115163, "lon": 11.8781351, "name": "Palazzo Zuckermann", "type": "attraction", "dist": 94, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "it:Palazzo Zuckermann", "web": "", "desc": "Palazzo Zuckermann \u00e8 un imponente edificio padovano, che si trova in Corso Garibaldi n. 33, in contiguit\u00e0 con l'edificio delle Poste Centrali.", "phone": "", "hours": ""}, {"lat": 45.4104394, "lon": 11.8798147, "name": "Chiesa degli Eremitani", "type": "attraction", "dist": 15, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "it:Chiesa degli Eremitani", "web": "", "desc": "La chiesa dei Santi Filippo e Giacomo, conosciuta come chiesa degli Eremitani o semplicemente gli Eremitani \u00e8 un luogo di culto cattolico medievale che si innalza in piazza Eremitani a Padova.", "phone": "", "hours": ""}, {"lat": 45.4086852, "lon": 11.8807022, "name": "Museo Storico della Terza Armata", "type": "museum", "dist": 18, "label": "Museo", "emoji": "\ud83c\udfdb\ufe0f", "color": "#9B59B6", "wiki": "", "web": "", "desc": "", "phone": "", "hours": ""}, {"lat": 45.4104137, "lon": 11.8857718, "name": "Museo della Fisica Giovanni Poleni", "type": "museum", "dist": 338, "label": "Museo", "emoji": "\ud83c\udfdb\ufe0f", "color": "#9B59B6", "wiki": "it:Museo di storia della fisica dell'Universit\u00e0 di Padova", "web": "https://www.musei.unipd.it/it/fisica", "desc": "Il Museo di Storia della Fisica \"Giovanni Poleni\" \u00e8 situato presso il Dipartimento di Fisica e Astronomia \u201cGalileo Galilei\u201d dell'Universit\u00e0 degli Studi di Padova. Il museo conserva una collezione di strumenti scientifici antichi strettamente legata al passato scientifico dell'Universit\u00e0 di Padova, che sin dal Settecento si caratterizz\u00f2 per l'innovazione e la vocazione sperimentale.", "phone": "+39 049 8277303", "hours": "Su 15:00-19:00"}, {"lat": 45.404592, "lon": 11.8941041, "name": "Planetario di Padova", "type": "attraction", "dist": 791, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "https://www.planetariopadova.it/", "desc": "", "phone": "", "hours": ""}, {"lat": 45.409991, "lon": 11.8933256, "name": "Scalinata del Porto fluviale del Portello", "type": "viewpoint", "dist": 721, "label": "Panoramico", "emoji": "\ud83c\udfd4\ufe0f", "color": "#FF6B35", "wiki": "", "web": "", "desc": "Monument", "phone": "", "hours": ""}, {"lat": 45.4107913, "lon": 11.8921107, "name": "Museo di macchine \"Enrico Bernardi\"", "type": "museum", "dist": 680, "label": "Museo", "emoji": "\ud83c\udfdb\ufe0f", "color": "#9B59B6", "wiki": "", "web": "https://m.musei.unipd.it/it/macchine", "desc": "", "phone": "+39 049 827 6700;+39 049 827 6750", "hours": ""}, {"lat": 45.4043389, "lon": 11.8894819, "name": "Ghiacciaia", "type": "attraction", "dist": 501, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "", "desc": "antica ghiacciaia - historic ice-house", "phone": "", "hours": ""}, {"lat": 45.4028814, "lon": 11.891697, "name": "Baluardo Cornaro", "type": "attraction", "dist": 738, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "", "desc": "", "phone": "", "hours": ""}, {"lat": 45.4106303, "lon": 11.8859464, "name": "Torrion Piccolo", "type": "attraction", "dist": 365, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "", "desc": "", "phone": "", "hours": ""}, {"lat": 45.404526, "lon": 11.8968266, "name": "Torrione Buovo", "type": "attraction", "dist": 991, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "", "desc": "", "phone": "", "hours": ""}, {"lat": 45.4096823, "lon": 11.892675, "name": "Porta Ognissanti", "type": "attraction", "dist": 661, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "it:Porta Ognissanti", "web": "", "desc": "La Porta Ognissanti \u00e8 una delle porte tuttora esistenti nell'ambito delle mura cinquecentesche di Padova, realizzate dalla Repubblica Serenissima.", "phone": "", "hours": ""}, {"lat": 45.408963, "lon": 11.8782958, "name": "Porta Altinate", "type": "historic", "dist": 2, "label": "Sito storico", "emoji": "\ud83c\udff0", "color": "#795548", "wiki": "it:Porta Altinate", "web": "", "desc": "La Porta Altinate o Porta di Ponte Altin\u00e0 era uno dei quattro accessi \"regales\" che si aprivano sulle mura comunali di Padova. La porta si innalza sulla prima pila del romano Ponte Altinate - ora non visibile - che attraversa il Naviglio Interno interrato negli anni sessanta dello scorso secolo per lasciare spazio alla via Riviera dei Ponti Romani. La porta e il ponte - come pure la seguente contrada - traggono il nome da Altino, la citt\u00e0 verso cui si dirigeva la strada a cui davano accesso. La porta \u00e8 un frequentato passaggio pedonale verso la piazza dei Noli, ora Garibaldi.", "phone": "", "hours": ""}, {"lat": 45.4113295, "lon": 11.8737613, "name": "Porta di Ponte Molino", "type": "historic", "dist": 409, "label": "Sito storico", "emoji": "\ud83c\udff0", "color": "#795548", "wiki": "it:Porta Molino", "web": "", "desc": "La Porta Molino o Porta dei Molini era il principale dei quattro accessi regales che si aprivano nella cinta muraria medievale di Padova. Affacciata verso settentrione, si innalza al termine del romano Ponte Molino che attraversa il ramo del Bacchiglione chiamato Tronco Maestro dove sino 1884 funzionarono trentatr\u00e9 ruote di altrettanti mulini montati su barche, da cui la porta ed il ponte traggono il nome.", "phone": "", "hours": ""}, {"lat": 45.4081476, "lon": 11.8776999, "name": "Galleria Cavour", "type": "gallery", "dist": 26, "label": "Galleria d'arte", "emoji": "\ud83d\uddbc\ufe0f", "color": "#F44336", "wiki": "", "web": "", "desc": "", "phone": "", "hours": ""}, {"lat": 45.4076922, "lon": 11.8770946, "name": "Caff\u00e9 Pedrocchi", "type": "attraction", "dist": 36, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "it:Caff\u00e8 Pedrocchi", "web": "", "desc": "Il Caff\u00e8 Pedrocchi, situato nel centro di Padova, in via VIII Febbraio n\u00ba 15, \u00e8 un caff\u00e8 storico di fama internazionale. Aperto giorno e notte fino al 1916 e perci\u00f2 noto anche come il \"Caff\u00e8 senza porte\", per oltre un secolo \u00e8 stato un prestigioso punto d'incontro frequentato da intellettuali, studenti, accademici e uomini politici.", "phone": "+39 049 8781231", "hours": ""}, {"lat": 45.4107674, "lon": 11.8734919, "name": "Black Light Gallery", "type": "gallery", "dist": 369, "label": "Galleria d'arte", "emoji": "\ud83d\uddbc\ufe0f", "color": "#F44336", "wiki": "", "web": "", "desc": "Orari: Tu-Sa 10:00-13:00, 15:30-19:30", "phone": "", "hours": "Tu-Sa 10:00-13:00, 15:30-19:30"}, {"lat": 45.408918, "lon": 11.8750757, "name": "Oratorio San Rocco", "type": "museum", "dist": 130, "label": "Museo", "emoji": "\ud83c\udfdb\ufe0f", "color": "#9B59B6", "wiki": "it:Scuola di San Rocco (Padova)", "web": "", "desc": "La Scuola di San Rocco o Oratorio di San Rocco \u00e8 un edificio di origine medievale utilizzato sino al 1810 per scopi religiosi. Si affaccia sul sagrato della chiesa di Santa Lucia a Padova. Vi aveva sede la Fraglia di San Rocco che la realizz\u00f2 tra il 1525 e il 1542 su precedenti edifici. Ora \u00e8 struttura di propriet\u00e0 comunale.", "phone": "", "hours": "Tu-Su 09:30-12:30, 15:30-19:00"}, {"lat": 45.4071317, "lon": 11.8756519, "name": "Pendolo di Foucault", "type": "attraction", "dist": 25, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "", "desc": "Orari: Tu-Su 09:00-18:00", "phone": "", "hours": "Tu-Su 09:00-18:00"}, {"lat": 45.4072462, "lon": 11.875262, "name": "Sotterranei del Palazzo della Ragione", "type": "attraction", "dist": 2, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "", "desc": "this indicates the entrance to the archeological site", "phone": "+49 049 8364363", "hours": ""}, {"lat": 45.4072648, "lon": 11.8752291, "name": "Palazzo della Ragione", "type": "museum", "dist": 4, "label": "Museo", "emoji": "\ud83c\udfdb\ufe0f", "color": "#9B59B6", "wiki": "it:Palazzo della Ragione (Padova)", "web": "https://padovacultura.padovanet.it/it/musei/palazzo-della-ragione", "desc": "Il Palazzo della Ragione era l'antica sede dei tribunali cittadini e del mercato coperto di Padova. La parte inferiore era gi\u00e0 esistente nel 1166, ma si stima che sia stato eretto tra il 1218 e il 1219, e tra il 1306 e il 1309 Giovanni degli Eremitani fece aggiungere il porticato e le logge e fece innalzare la copertura a cui diede la caratteristica forma di carena di nave rovesciata. Il piano superiore \u00e8 occupato da quella che \u00e8 stata la pi\u00f9 grande sala pensile del mondo, detta \"Salone\", che misura circa 80 metri per 27 e ha un'altezza di quasi 40 metri, con soffitto ligneo a carena di nave. Il piano inferiore ospita invece lo storico mercato coperto della citt\u00e0. Il palazzo fa parte dei musei civici di Padova. Grazie agli affreschi presenti nel Salone, realizzati in origine da Giotto e rifatti dopo l'incendio del 1420, nel 2021 \u00e8 stato incluso dall'UNESCO tra i patrimoni dell'umanit\u00e0 nel sito dei cicli di affreschi del XIV secolo di Padova.", "phone": "", "hours": ""}, {"lat": 45.407744, "lon": 11.872787, "name": "Torre dell'Orologio", "type": "attraction", "dist": 65, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "it:Torre dell'Orologio (Padova)", "web": "", "desc": "La Torre dell'Orologio \u00e8 un edificio di origine medievale che si affaccia su Piazza dei Signori a Padova. Si erge tra il Palazzo del Capitanio e il Palazzo dei Camerlenghi.", "phone": "", "hours": ""}, {"lat": 45.4080088, "lon": 11.8714393, "name": "Museo di Scienze Archeologiche e d'Arte", "type": "museum", "dist": 142, "label": "Museo", "emoji": "\ud83c\udfdb\ufe0f", "color": "#9B59B6", "wiki": "", "web": "", "desc": "Gestito da: Universit\u00e0 degli Studi di Padova", "phone": "", "hours": ""}, {"lat": 45.4086099, "lon": 11.8722382, "name": "Galleria Daniele", "type": "gallery", "dist": 167, "label": "Galleria d'arte", "emoji": "\ud83d\uddbc\ufe0f", "color": "#F44336", "wiki": "", "web": "", "desc": "Orari: Tu-Fr 10:00-13:00, 16:00-19:30 \u00b7 Biglietto: gratuito", "phone": "", "hours": "Tu-Fr 10:00-13:00, 16:00-19:30"}, {"lat": 45.4074363, "lon": 11.8730143, "name": "Loggia della Gran Guardia", "type": "attraction", "dist": 35, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "it:Loggia della Gran Guardia", "web": "", "desc": "La Loggia del Consiglio, conosciuta anche come Loggia della Gran Guardia, \u00e8 un edificio rinascimentale che si affaccia su Piazza dei Signori a Padova. Fu realizzata a partire dal 1491 come sede del Gran Consiglio. Sorse su un progetto presentato da Annibale Maggi e la fabbrica si concluse nel 1536, secondo alcuni studi, a direzione di Giovanni Maria Falconetto. La sala superiore fu affrescata nel 1667 da Pier Antonio Torri. Durante la dominazione austriaca divenne sede della \"Gran Guardia\", comando militare della citt\u00e0.", "phone": "", "hours": ""}, {"lat": 45.4070014, "lon": 11.8723705, "name": "Palazzo del Monte di Piet\u00e0", "type": "museum", "dist": 31, "label": "Museo", "emoji": "\ud83c\udfdb\ufe0f", "color": "#9B59B6", "wiki": "", "web": "https://www.palazzodelmontepadova.com", "desc": "Orari: Mo-Fr 09:30-18:30; Sa 09:30-13:30 \u00b7 Biglietto: yes", "phone": "+39 049 8234882", "hours": "Mo-Fr 09:30-18:30; Sa 09:30-13:30"}, {"lat": 45.406805, "lon": 11.8717946, "name": "Battistero", "type": "attraction", "dist": 71, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "it:Battistero di Padova", "web": "", "desc": "Il battistero della Cattedrale, dedicato a san Giovanni Battista, \u00e8 un edificio di culto ubicato accanto al Duomo, a Padova. Conserva al suo interno uno dei pi\u00f9 importanti cicli ad affresco del XIV secolo, capolavoro di Giusto de Menabuoi. Dal 2021 \u00e8 incluso dall'UNESCO tra i patrimoni dell'umanit\u00e0 nel sito dei cicli di affreschi del XIV secolo di Padova.", "phone": "", "hours": ""}, {"lat": 45.406438, "lon": 11.8720871, "name": "Museo Diocesano", "type": "museum", "dist": 33, "label": "Museo", "emoji": "\ud83c\udfdb\ufe0f", "color": "#9B59B6", "wiki": "", "web": "", "desc": "Biglietto: gratuito", "phone": "", "hours": ""}, {"lat": 45.4057628, "lon": 11.8731299, "name": "Museo dell'Educazione", "type": "museum", "dist": 70, "label": "Museo", "emoji": "\ud83c\udfdb\ufe0f", "color": "#9B59B6", "wiki": "it:Museo dell'Educazione", "web": "", "desc": "Il Museo dell'Educazione dell'Universit\u00e0 degli Studi di Padova ha sede presso il Dipartimento di Filosofia, Sociologia, Pedagogia e Psicologia Applicata FISPPA e conserva materiale del passato relativo alla formazione dell'individuo, a partire dalla nascita fino ad arrivare all'et\u00e0 adulta.", "phone": "", "hours": ""}, {"lat": 45.4049932, "lon": 11.8731198, "name": "Palazzo Papafava dei Carraresi", "type": "historic", "dist": 123, "label": "Sito storico", "emoji": "\ud83c\udff0", "color": "#795548", "wiki": "", "web": "", "desc": "Castle", "phone": "", "hours": ""}, {"lat": 45.4020295, "lon": 11.8685594, "name": "Museo di Astronomia", "type": "museum", "dist": 479, "label": "Museo", "emoji": "\ud83c\udfdb\ufe0f", "color": "#9B59B6", "wiki": "", "web": "https://www.oapd.inaf.it", "desc": "Orari: Oct-May Th 17:30+; Jun-Sep Sa-Su 18:00+ \u00b7 Biglietto: yes", "phone": "", "hours": "Oct-May Th 17:30+; Jun-Sep Sa-Su 18:00+"}, {"lat": 45.4019143, "lon": 11.8685699, "name": "La Specola", "type": "attraction", "dist": 490, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "it:Specola di Padova", "web": "", "desc": "La Specola di Padova \u00e8 la sede dell'Osservatorio Astronomico di Padova, una delle pi\u00f9 importanti strutture di ricerca dell'Istituto Nazionale di Astrofisica (INAF). Nato come gabinetto universitario nel 1767, l'Osservatorio divenne ente giuridico autonomo nel 1923, per confluire infine nell'INAF nel 2001. La Specola fu realizzata trasformando e riadattando interamente la torre principale del Castelvecchio, la cosiddetta Torlonga. \u00c8 alta 49,59\u00a0m per 252 gradini.", "phone": "", "hours": ""}, {"lat": 45.4023602, "lon": 11.8693219, "name": "Castello Carrarese", "type": "historic", "dist": 421, "label": "Sito storico", "emoji": "\ud83c\udff0", "color": "#795548", "wiki": "it:Castelvecchio (Padova)", "web": "", "desc": "Il Castelvecchio, anticamente definito Castello della Torlonga ma oggi conosciuto anche come Castello di Ezzelino, o Castello Carrarese o ancora Castello di Padova, \u00e8 una fortificazione di origine altomedievale posta sulla biforcazione del Bacchiglione dove si divide in Tronco Maestro e Naviglio interno. Deve le attuali caratteristiche alla signoria dei Da Carrara. Durante il XIX secolo e il XX secolo venne in gran parte utilizzato come prigione statale mentre il mastio, la Torlonga, \u00e8 dal XVIII secolo la Specola cittadina.", "phone": "", "hours": ""}, {"lat": 45.4076312, "lon": 11.8692899, "name": "Ruderi del \"Traghetto delle Mura\"", "type": "historic", "dist": 197, "label": "Sito storico", "emoji": "\ud83c\udff0", "color": "#795548", "wiki": "", "web": "", "desc": "Ruins", "phone": "", "hours": ""}, {"lat": 45.4115266, "lon": 11.8643653, "name": "Bastione Savonarola", "type": "attraction", "dist": 777, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "", "desc": "", "phone": "", "hours": ""}, {"lat": 45.4077229, "lon": 11.8639469, "name": "Bastione San Prosdocimo", "type": "attraction", "dist": 570, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "", "desc": "", "phone": "", "hours": ""}, {"lat": 45.4037251, "lon": 11.8639483, "name": "Bastione San Giovanni", "type": "attraction", "dist": 617, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "", "desc": "", "phone": "", "hours": ""}, {"lat": 45.4122656, "lon": 11.8647598, "name": "Porta Savonarola", "type": "attraction", "dist": 821, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "", "desc": "City gate", "phone": "", "hours": ""}, {"lat": 45.4050584, "lon": 11.8642435, "name": "Porta San Giovanni", "type": "attraction", "dist": 541, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "", "desc": "City gate", "phone": "", "hours": ""}, {"lat": 45.4073191, "lon": 11.8712529, "name": "Loggia della Reggia dei Carraresi", "type": "attraction", "dist": 116, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "it:Loggia dei Carraresi", "web": "", "desc": "La Loggia dei Carraresi \u00e8 un edificio storico di Padova situato in via Accademia. Costituisce l'ultima parte sopravvissuta per intero della Reggia Carrarese, la grande residenza dei Da Carrara, signori di Padova. Dal 2021 \u00e8 inclusa dall'UNESCO tra i patrimoni dell'umanit\u00e0 nel sito dei cicli di affreschi del XIV secolo di Padova.", "phone": "", "hours": ""}, {"lat": 45.4065164, "lon": 11.8712598, "name": "Duomo di Padova", "type": "attraction", "dist": 35, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "it:Duomo di Padova", "web": "", "desc": "La Basilica cattedrale di Santa Maria Assunta \u00e8 il principale luogo di culto cattolico di Padova e sede vescovile della diocesi omonima almeno dal IV secolo.\nDedicata all'Assunzione di Maria ha la dignit\u00e0 di basilica minore ed \u00e8 inoltre sede parrocchiale. Al suo interno si venerano i corpi di san Daniele, san Leonino e di san Gregorio Barbarigo. L'edificio attuale risale al XVI secolo e alla sua costruzione intervenne Michelangelo Buonarroti. Si affaccia su piazza Duomo. Accanto si innalza il complesso del Vescovado.", "phone": "", "hours": "Mo-Su 07:30-12:00, 15:45-19:30"}, {"lat": 45.4071754, "lon": 11.8766055, "name": "Palazzo Moroni", "type": "attraction", "dist": 5, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "", "desc": "", "phone": "", "hours": ""}, {"lat": 45.406726, "lon": 11.877418, "name": "Palazzo del Bo", "type": "komoot", "dist": 0, "label": "Komoot", "emoji": "\ud83d\udeb4", "color": "#6AA84F", "wiki": "it:Palazzo del Bo", "web": "", "desc": "Il Palazzo del Bo \u00e8 la storica sede dell'Universit\u00e0 degli Studi di Padova dal 1493. Tuttora \u00e8 sede del rettorato e della Scuola di Giurisprudenza, nonch\u00e9 del Teatro anatomico pi\u00f9 antico del mondo.", "phone": "", "hours": ""}, {"lat": 45.4062254, "lon": 11.8775498, "name": "Ponte San Lorenzo", "type": "historic", "dist": 22, "label": "Sito storico", "emoji": "\ud83c\udff0", "color": "#795548", "wiki": "en:Ponte San Lorenzo", "web": "", "desc": "The Ponte San Lorenzo is a Roman bridge over the river Bacchiglione in Padua, Italy. Constructed between 47 and 30\u00a0BC, it is one of the very earliest segmental arched bridges in the world. It is also notable for the slenderness of its piers, unsurpassed in antiquity.", "phone": "", "hours": ""}, {"lat": 45.4056547, "lon": 11.879923, "name": "Palazzo Roccabonella", "type": "attraction", "dist": 59, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "", "desc": "", "phone": "", "hours": ""}, {"lat": 45.4060178, "lon": 11.8793372, "name": "Palazzo Zabarella", "type": "museum", "dist": 18, "label": "Museo", "emoji": "\ud83c\udfdb\ufe0f", "color": "#9B59B6", "wiki": "it:Palazzo Zabarella", "web": "", "desc": "Palazzo Zabarella \u00e8 uno storico palazzo padovano. Si trova nel centro storico della citt\u00e0, in via S. Francesco, 27.", "phone": "", "hours": ""}, {"lat": 45.4052181, "lon": 11.8803368, "name": "Museo di Storia della Medicina in Padova (MUSME)", "type": "museum", "dist": 88, "label": "Museo", "emoji": "\ud83c\udfdb\ufe0f", "color": "#9B59B6", "wiki": "it:MUSME", "web": "http://www.musme.padova.it/", "desc": "Il Museo di storia della medicina di Padova (MUSME) \u00e8 un museo aperto al pubblico dal 2015 e situato all'interno dell'antico Ospedale di San Francesco Grande, a fianco della chiesa di San Francesco Grande a Padova. Il museo, attraverso i suoi strumenti interattivi e le sue collezioni, illustra al pubblico di ogni et\u00e0 e istruzione l'evoluzione della scienza medica nel corso dei secoli, con particolare riferimento alla storia della medicina nell'universit\u00e0 di Padova, una delle pi\u00f9 importanti scuole mediche in Occidente.", "phone": "", "hours": ""}, {"lat": 45.4049804, "lon": 11.8791485, "name": "Museo di Geografia", "type": "museum", "dist": 27, "label": "Museo", "emoji": "\ud83c\udfdb\ufe0f", "color": "#9B59B6", "wiki": "", "web": "https://www.musei.unipd.it/geografia", "desc": "The Museum of Geography is located at the first floor of the Wollemborg Palace, seat of the DiSSGeA Section of Geography. While The Museum spaces are currently under preparation.", "phone": "+39 0498274276", "hours": "Mo,We-Sa off; Tu 15:00-18:00; Su 14:30-18:30"}, {"lat": 45.4050308, "lon": 11.881054, "name": "Scuola della Carit\u00e0", "type": "attraction", "dist": 143, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "it:Scuola della Carit\u00e0 (Padova)", "web": "", "desc": "La Scuola della Carit\u00e0 di Padova \u00e8 un edificio di origine medievale che dai primi decenni del Quattrocento fu la sede della Confraternita della Carit\u00e0, congregazione di carattere laico dedicata ad attivit\u00e0 devozionali e assistenziali, fino agli inizi dell'Ottocento. Il complesso \u00e8 utilizzato per attivit\u00e0 culturali.", "phone": "", "hours": ""}, {"lat": 45.402195, "lon": 11.8795846, "name": "Palazzo Tolomei", "type": "attraction", "dist": 39, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "", "desc": "", "phone": "", "hours": ""}, {"lat": 45.4009581, "lon": 11.8801835, "name": "Oratorio di San Giorgio", "type": "attraction", "dist": 38, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "it:Oratorio di San Giorgio (Padova)", "web": "", "desc": "L'oratorio di San Giorgio si trova in piazza del Santo a Padova. Dal 2021 \u00e8 incluso dall'UNESCO tra i patrimoni dell'umanit\u00e0 nel sito dei cicli di affreschi del XIV secolo di Padova.", "phone": "", "hours": ""}, {"lat": 45.4014621, "lon": 11.8809333, "name": "Basilica di sant'Antonio Di Padova", "type": "attraction", "dist": 4, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "it:Basilica di Sant'Antonio di Padova", "web": "", "desc": "La Pontificia Basilica Minore di Sant'Antonio di Padova \u00e8 uno dei principali luoghi di culto cattolici della citt\u00e0 di Padova, in Veneto.", "phone": "", "hours": "Oct Su[-1]-Mar Su[-1] -1 day: Mo-Fr 06:15-19:25; Mar Su[-1]-Oct Su[-1] -1 day: Mo-Fr 06:15-18:45; Sa-Su 06:15-19:25"}, {"lat": 45.4007663, "lon": 11.8852578, "name": "Mura Cinquecentesche", "type": "historic", "dist": 349, "label": "Sito storico", "emoji": "\ud83c\udff0", "color": "#795548", "wiki": "", "web": "", "desc": "Citywalls", "phone": "", "hours": ""}, {"lat": 45.4003095, "lon": 11.8848912, "name": "Porta Liviana", "type": "attraction", "dist": 337, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "it:Porta Liviana", "web": "", "desc": "La Porta Liviana era una delle principali porte d'accesso delle mura cinquecentesche di Padova. Nota anche come Porta Ponte Corvo, dal nome della localit\u00e0 in cui sorge, \u00e8 detta Liviana in onore di Bartolomeo d'Alviano, il condottiero e stratega rinascimentale che progett\u00f2 le difese di Padova.", "phone": "", "hours": ""}, {"lat": 45.4026242, "lon": 11.8821798, "name": "Loggia e Odeo Cornaro", "type": "attraction", "dist": 165, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "it:Loggia e Odeo Cornaro", "web": "https://padovacultura.padovanet.it/it/musei/loggia-e-odeo-cornaro-0", "desc": "La Loggia e l'Odeo Cornaro erano parte di un pi\u00f9 ampio complesso di edifici e giardini fatto costruire da Alvise Cornaro nella prima met\u00e0 del XVI secolo, nel vasto parco della sua residenza di via del Bersaglio a Padova, a pochi passi dalla Basilica di Sant'Antonio.", "phone": "", "hours": ""}, {"lat": 45.4006744, "lon": 11.8799258, "name": "Museo al Santo", "type": "museum", "dist": 12, "label": "Museo", "emoji": "\ud83c\udfdb\ufe0f", "color": "#9B59B6", "wiki": "", "web": "", "desc": "", "phone": "", "hours": ""}, {"lat": 45.4002628, "lon": 11.8802289, "name": "Museo Antoniano", "type": "museum", "dist": 36, "label": "Museo", "emoji": "\ud83c\udfdb\ufe0f", "color": "#9B59B6", "wiki": "", "web": "", "desc": "Orari: Tu-Su 09:00-13:00,14:00-18:00 \u00b7 Biglietto: yes", "phone": "", "hours": "Tu-Su 09:00-13:00,14:00-18:00"}, {"lat": 45.3996295, "lon": 11.8805223, "name": "Museo Botanico", "type": "museum", "dist": 53, "label": "Museo", "emoji": "\ud83c\udfdb\ufe0f", "color": "#9B59B6", "wiki": "", "web": "https://ortobotanico1545.it/scopri/i-luoghi/museo-botanico/", "desc": "Orari: Apr-Sep: Tu-Su,PH 10:00-19:00; Oct Tu-Su,PH 10:00-18:00; Nov-Mar Tu-Su,PH 10:00-17:00; Jan 09-Feb 13 off \u00b7 Biglietto: yes \u00b7 Gestito da: Universit\u00e0 di Padova", "phone": "+39 049 8273939", "hours": "Apr-Sep: Tu-Su,PH 10:00-19:00; Oct Tu-Su,PH 10:00-18:00; Nov-Mar Tu-Su,PH 10:00-17:00; Jan 09-Feb 13 off"}, {"lat": 45.3985263, "lon": 11.8806012, "name": "Orto Botanico 1545", "type": "attraction", "dist": 16, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "it:Orto botanico di Padova", "web": "http://ortobotanicopd.it/", "desc": "L'orto botanico di Padova, fondato nel 1545, \u00e8 il pi\u00f9 antico orto botanico al mondo ancora nella sua collocazione originaria ed uno dei pi\u00f9 antichi in assoluto. Situato in un'area di circa 2,2 ettari, si trova nel centro storico di Padova, nei pressi del Prato della Valle. Dal 1997 \u00e8 Patrimonio dell'umanit\u00e0 dell'UNESCO.", "phone": "", "hours": "Apr-May Mo-Su 09:00-19:00; Jun-Sep Tu-Su 09:00-19:00, PH 09:00-19:00; Oct Tu-Su 09:00-18:00, PH 09:00-18:00; Nov-Mar Tu-Su 09:00-17:00, PH 09:00-17:00"}, {"lat": 45.3983298, "lon": 11.8841478, "name": "Torrione di Pontecorvo", "type": "attraction", "dist": 271, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "https://www.muradipadova.it/lic/le-mura-rinascimentali/i-bastioni/torrione-pontecorvo.html", "desc": "", "phone": "", "hours": ""}, {"lat": 45.3999178, "lon": 11.8794081, "name": "Villa Tron", "type": "attraction", "dist": 25, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "", "desc": "Manor", "phone": "", "hours": ""}, {"lat": 45.3948309, "lon": 11.8723048, "name": "Palazzo Dolfin Papadopoli", "type": "historic", "dist": 563, "label": "Sito storico", "emoji": "\ud83c\udff0", "color": "#795548", "wiki": "", "web": "", "desc": "Manor", "phone": "", "hours": ""}, {"lat": 45.3924273, "lon": 11.8740257, "name": "Porta Santa Croce", "type": "attraction", "dist": 634, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "", "desc": "", "phone": "", "hours": ""}, {"lat": 45.391425, "lon": 11.8708829, "name": "Mura Cinquecentesche", "type": "historic", "dist": 879, "label": "Sito storico", "emoji": "\ud83c\udff0", "color": "#795548", "wiki": "", "web": "", "desc": "Citywalls", "phone": "", "hours": ""}, {"lat": 45.392565, "lon": 11.8746825, "name": "Mura Cinquecentesche", "type": "historic", "dist": 592, "label": "Sito storico", "emoji": "\ud83c\udff0", "color": "#795548", "wiki": "", "web": "", "desc": "Citywalls", "phone": "", "hours": ""}, {"lat": 45.3924401, "lon": 11.8749236, "name": "Baluardo Santa Croce", "type": "attraction", "dist": 594, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "https://www.muradipadova.it/lic/le-mura-rinascimentali/i-bastioni/baluardo-s-croce.html", "desc": "", "phone": "", "hours": ""}, {"lat": 45.3941814, "lon": 11.8805939, "name": "Torrione di Santa Giustina", "type": "attraction", "dist": 259, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "https://www.muradipadova.it/lic/le-mura-rinascimentali/i-bastioni/santa-giustina.html", "desc": "", "phone": "", "hours": ""}, {"lat": 45.3935711, "lon": 11.8781103, "name": "Breccia di Santa Giustina", "type": "historic", "dist": 362, "label": "Sito storico", "emoji": "\ud83c\udff0", "color": "#795548", "wiki": "", "web": "", "desc": "City gate", "phone": "", "hours": ""}, {"lat": 45.3961688, "lon": 11.8796116, "name": "Abbazia di Santa Giustina", "type": "attraction", "dist": 57, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "it:Basilica di Santa Giustina", "web": "https://www.abbaziasantagiustina.org/", "desc": "La Basilica abbaziale di Santa Giustina \u00e8 un importante luogo di culto cattolico di Padova, situato in Prato della Valle. \u00c8 monumento nazionale italiano.", "phone": "", "hours": "Mo-Su 08:00-12:00, 15:00-20:00"}, {"lat": 45.3972926, "lon": 11.8827564, "name": "Mura Cinquecentesche", "type": "historic", "dist": 221, "label": "Sito storico", "emoji": "\ud83c\udff0", "color": "#795548", "wiki": "", "web": "", "desc": "Citywalls", "phone": "", "hours": ""}, {"lat": 45.3942166, "lon": 11.8805685, "name": "Mura Cinquecentesche", "type": "historic", "dist": 255, "label": "Sito storico", "emoji": "\ud83c\udff0", "color": "#795548", "wiki": "", "web": "", "desc": "Citywalls", "phone": "", "hours": ""}, {"lat": 45.3984304, "lon": 11.8765204, "name": "Isola Memmia", "type": "attraction", "dist": 96, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "it:Prato della Valle", "web": "", "desc": "Il Prato della Valle \u00e8 la pi\u00f9 grande piazza della citt\u00e0 di Padova, con una superficie di 88620\u00a0m\u00b2.", "phone": "", "hours": ""}, {"lat": 45.399634, "lon": 11.877023, "name": "Prato Della Valle", "type": "komoot", "dist": 0, "label": "Komoot", "emoji": "\ud83d\udeb4", "color": "#6AA84F", "wiki": "", "web": "", "desc": "", "phone": "", "hours": ""}, {"lat": 45.3989383, "lon": 11.8749253, "name": "Loggia Amulea", "type": "attraction", "dist": 144, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "it:Loggia Amulea", "web": "", "desc": "La Loggia Amulea \u00e8 un palazzo in stile neogotico situato in Prato della Valle, la pi\u00f9 grande piazza di Padova. Il palazzo \u00e8 stato sede dei vigili del fuoco di Padova dal 1906 al 1989; in seguito ospita alcuni uffici comunali. Il fronte della costruzione \u00e8 caratterizzato da un elegante loggiato; nella sala adiacente alla grande balconata vengono talora celebrati i matrimoni civili.", "phone": "", "hours": ""}, {"lat": 45.4001955, "lon": 11.8759224, "name": "Museo del Pre Cinema", "type": "museum", "dist": 6, "label": "Museo", "emoji": "\ud83c\udfdb\ufe0f", "color": "#9B59B6", "wiki": "", "web": "https://www.minicizotti.it/", "desc": "Orari: We-Mo 10:00-16:00, Tu off \u00b7 Biglietto: yes", "phone": "+39 049 8763838", "hours": "We-Mo 10:00-16:00, Tu off"}, {"lat": 45.3961792, "lon": 11.8656055, "name": "Torrione Ghirlanda", "type": "attraction", "dist": 903, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "https://www.muradipadova.it/lic/le-mura-rinascimentali/i-bastioni/ghirlanda.html", "desc": "", "phone": "", "hours": ""}, {"lat": 45.3994839, "lon": 11.8642245, "name": "Torrione della Saracinesca", "type": "attraction", "dist": 899, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "", "desc": "", "phone": "", "hours": ""}, {"lat": 45.3993427, "lon": 11.8655348, "name": "Bastione della Catena", "type": "attraction", "dist": 799, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "", "desc": "", "phone": "", "hours": ""}, {"lat": 45.4004741, "lon": 11.8710003, "name": "Villa Canale", "type": "attraction", "dist": 369, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "", "desc": "Manor", "phone": "", "hours": ""}, {"lat": 45.3946861, "lon": 11.8679214, "name": "Mura Cinquecentesche", "type": "historic", "dist": 859, "label": "Sito storico", "emoji": "\ud83c\udff0", "color": "#795548", "wiki": "", "web": "", "desc": "Citywalls", "phone": "", "hours": ""}, {"lat": 45.401462, "lon": 11.8753592, "name": "Palazzo Emo Capodilista", "type": "attraction", "dist": 32, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "it:Palazzo Capodilista", "web": "", "desc": "Palazzo Capodilista \u00e8 un edificio storico di Padova.", "phone": "", "hours": ""}, {"lat": 45.4024171, "lon": 11.8711662, "name": "Casa Bonandini", "type": "attraction", "dist": 335, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "", "web": "", "desc": "Manor", "phone": "", "hours": ""}, {"lat": 45.401318, "lon": 11.8691005, "name": "Oratorio di San Michele", "type": "attraction", "dist": 515, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "it:Oratorio di San Michele (Padova)", "web": "", "desc": "L'oratorio di San Michele \u00e8 quanto rimane dell'antica Chiesa dei Santi Arcangeli; il nome originale dei Santi Arcangeli, convertito in San Michele, risente del passaggio attraverso l'epoca longobarda in cui San Michele viene proclamato patrono d'Italia dopo la vittoria dei Longobardi sui Bizantini. L'oratorio ospita al suo interno una cappella, completamente affrescata da Jacopo da Verona, il cui ciclo pittorico ruota attorno alla vita della Vergine. Dal 2021 \u00e8 inclusa dall'UNESCO tra i patrimoni dell'umanit\u00e0 nel sito dei cicli di affreschi del XIV secolo di Padova.", "phone": "", "hours": ""}, {"lat": 45.403392, "lon": 11.875609, "name": "Canale Naviglio Interno", "type": "komoot", "dist": 0, "label": "Komoot", "emoji": "\ud83d\udeb4", "color": "#6AA84F", "wiki": "", "web": "", "desc": "", "phone": "", "hours": ""}, {"lat": 45.4045792, "lon": 11.8756493, "name": "Chiesa di Santa Maria dei Servi", "type": "attraction", "dist": 26, "label": "Attrazione", "emoji": "\u2b50", "color": "#2196F3", "wiki": "it:Chiesa di Santa Maria dei Servi (Padova)", "web": "", "desc": "La chiesa della Nativit\u00e0 della Beata Vergine Maria ai Servi conosciuta come Santa Maria dei Servi o Servi \u00e8 un edificio religioso trecentesco che si affaccia sulla via Roma a Padova. Gi\u00e0 dei Servi di Maria, \u00e8 attualmente chiesa parrocchiale nel vicariato del Basilica Cattedrale di Santa Maria Assunta retta dall'Ordine dei Servi di Maria. Le chiese di San Canziano e San Luca sono sue sussidiarie. Per un periodo le furono sussidiarie anche le scomparse chiese di San Zilio e di Santa Giuliana. La chiesa conserva opere d'arte insigni tra cui il Crocifisso ligneo opera di Donatello.", "phone": "", "hours": ""}, {"lat": 45.405051, "lon": 11.8762226, "name": "Sala Samon\u00e0", "type": "gallery", "dist": 4, "label": "Galleria d'arte", "emoji": "\ud83d\uddbc\ufe0f", "color": "#F44336", "wiki": "", "web": "", "desc": "", "phone": "", "hours": ""}, {"lat": 45.4060426, "lon": 11.8759223, "name": "Museo della Padova Ebraica", "type": "museum", "dist": 55, "label": "Museo", "emoji": "\ud83c\udfdb\ufe0f", "color": "#9B59B6", "wiki": "", "web": "http://www.museopadovaebraica.it/", "desc": "Gaat over het Joodse erfgoed van de stad", "phone": "049661267", "hours": "Mo, Th 10:00-17:00; Su 10:00-18:00"}, {"lat": 45.406898, "lon": 11.875959, "name": "Palazzo della Ragione e il Mercato di Piazza delle Erbe, Padova", "type": "komoot", "dist": 0, "label": "Komoot", "emoji": "\ud83d\udeb4", "color": "#6AA84F", "wiki": "it:Palazzo della Ragione (Padova)", "web": "https://padovacultura.padovanet.it/it/musei/palazzo-della-ragione", "desc": "Il Palazzo della Ragione era l'antica sede dei tribunali cittadini e del mercato coperto di Padova. La parte inferiore era gi\u00e0 esistente nel 1166, ma si stima che sia stato eretto tra il 1218 e il 1219, e tra il 1306 e il 1309 Giovanni degli Eremitani fece aggiungere il porticato e le logge e fece innalzare la copertura a cui diede la caratteristica forma di carena di nave rovesciata. Il piano superiore \u00e8 occupato da quella che \u00e8 stata la pi\u00f9 grande sala pensile del mondo, detta \"Salone\", che misura circa 80 metri per 27 e ha un'altezza di quasi 40 metri, con soffitto ligneo a carena di nave. Il piano inferiore ospita invece lo storico mercato coperto della citt\u00e0. Il palazzo fa parte dei musei civici di Padova. Grazie agli affreschi presenti nel Salone, realizzati in origine da Giotto e rifatti dopo l'incendio del 1420, nel 2021 \u00e8 stato incluso dall'UNESCO tra i patrimoni dell'umanit\u00e0 nel sito dei cicli di affreschi del XIV secolo di Padova.", "phone": "", "hours": ""}];
+window.APP_TYPES = {"viewpoint": {"emoji": "\ud83c\udfd4\ufe0f", "label": "Panoramico", "color": "#FF6B35"}, "museum": {"emoji": "\ud83c\udfdb\ufe0f", "label": "Museo", "color": "#9B59B6"}, "gallery": {"emoji": "\ud83d\uddbc\ufe0f", "label": "Galleria d'arte", "color": "#F44336"}, "artwork": {"emoji": "\ud83c\udfa8", "label": "Arte/Monumento", "color": "#E91E63"}, "attraction": {"emoji": "\u2b50", "label": "Attrazione", "color": "#2196F3"}, "historic": {"emoji": "\ud83c\udff0", "label": "Sito storico", "color": "#795548"}, "komoot": {"emoji": "\ud83d\udeb4", "label": "Komoot", "color": "#6AA84F"}};
+window.APP_NEAR  = 5000;
+window.NAV_LABEL = "Naviga con Apple Maps";
+window.NAV_URL   = function(p) { return "https://maps.apple.com/?ll="+p.lat+","+p.lon+"&q="+encodeURIComponent(p.name)+"&dirflg=w"; };
+
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+
+(function() {
+  var TRACK = window.APP_TRACK;
+  var POIS  = window.APP_POIS;
+  var TYPES     = window.APP_TYPES;
+  var NAV_URL   = window.NAV_URL;
+  var NAV_LABEL = window.NAV_LABEL;
+  var mapEl       = document.getElementById('map');
+  var NEAR_M      = window.APP_NEAR;
+  var nearActive  = false;
+  var nearFilter  = null;
+  var searchQuery = "";
+  var webOnly     = false;
+  var lastRenderLat = null;
+  var lastRenderLon = null;
+
+  var map = L.map("map", {zoomControl: true});
+  map.setView([45.411915, 11.879541], 8);
+
+  L.tileLayer(
+    "https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",
+    {
+      attribution: "&copy; CyclOSM &copy; OpenStreetMap contributors",
+      maxZoom: 20
+    }
+  ).addTo(map);
+
+  L.polyline(TRACK, {color: "#e94560", weight: 3, opacity: 0.85}).addTo(map);
+
+  var markers = [];
+  var active  = {};
+  Object.keys(TYPES).forEach(function(t) { active[t] = true; });
+
+  var _o = "<", _c = ">";  // prevent HTML parser from seeing tags in script
+
+  function makeIcon(type) {
+    var c = TYPES[type] || TYPES["attraction"];
+    var inner;
+    if (type === "komoot") {
+      inner = _o + "svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='14' height='14' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'" + _c
+            + _o + "circle cx='5.5' cy='17.5' r='3.5'/" + _c + _o + "circle cx='18.5' cy='17.5' r='3.5'/" + _c
+            + _o + "path d='M15 6h-5l-2 6h9l-2-6z'/" + _c + _o + "line x1='5.5' y1='17.5' x2='10' y2='6'/" + _c
+            + _o + "/svg" + _c;
+    } else {
+      inner = _o + "span style='font-size:13px;line-height:26px'" + _c + c.emoji + _o + "/span" + _c;
+    }
+    return L.divIcon({
+      html: _o + "div style='background:" + c.color + ";width:26px;height:26px;"
+          + "border-radius:50%;display:flex;align-items:center;justify-content:center;"
+          + "border:2px solid white;box-shadow:0 2px 5px rgba(0,0,0,0.35)'" + _c
+          + inner + _o + "/div" + _c,
+      iconSize:   [26, 26],
+      iconAnchor: [13, 13],
+      className:  ""
+    });
+  }
+
+  function makePopupHTML(p) {
+    var s = _o + "b" + _c + p.emoji + " " + p.name + _o + "/b" + _c
+          + _o + "br" + _c + _o + "small style='color:#555'" + _c + p.label + _o + "/small" + _c;
+    if (p.dist > 0) {
+      s += _o + "br" + _c + _o + "small style='color:#2a9d8f'" + _c + p.dist + " m dal percorso" + _o + "/small" + _c;
+    }
+    if (p.hours) {
+      s += _o + "br" + _c + _o + "small style='color:#888'" + _c + "🕐 " + p.hours + _o + "/small" + _c;
+    }
+    if (p.phone) {
+      s += _o + "br" + _c + _o + "a href='tel:" + p.phone + "' style='font-size:0.8em'" + _c + "📞 " + p.phone + _o + "/a" + _c;
+    }
+    if (p.wiki) {
+      var wparts = p.wiki.indexOf(":") !== -1 ? p.wiki.split(":") : ["it", p.wiki];
+      var wlang = wparts[0], wtitle = wparts.slice(1).join(":");
+      s += _o + "br" + _c + _o + "a href='https://" + wlang + ".wikipedia.org/wiki/" + encodeURIComponent(wtitle)
+        +  "' target='_blank' style='font-size:0.8em'" + _c + "Wikipedia" + _o + "/a" + _c;
+    }
+    if (p.web) {
+      s += _o + "br" + _c + _o + "a href='" + p.web + "' target='_blank' style='font-size:0.8em'" + _c + "Sito web" + _o + "/a" + _c;
+    }
+    return s;
+  }
+
+  var selectedRow    = null;
+  var selectedMarker = null;
+
+  function deselectPOI() {
+    if (selectedRow)    { selectedRow.classList.remove("selected"); selectedRow = null; }
+    if (selectedMarker) { selectedMarker.closePopup(); selectedMarker = null; }
+  }
+
+  function selectPOI(row, m, p) {
+    if (selectedRow) selectedRow.classList.remove("selected");
+    selectedRow    = row;
+    selectedMarker = m;
+    row.classList.add("selected");
+    row.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  function render() {
+    markers.forEach(function(m) { m.remove(); });
+    markers = [];
+    selectedRow = null;
+    var list    = document.getElementById("list");
+    var counter = document.getElementById("vis-count");
+    list.innerHTML = "";
+    var q = searchQuery.trim().toLowerCase();
+    var visible = [];
+    for (var i = 0; i < POIS.length; i++) {
+      if (!active[POIS[i].type]) continue;
+      if (nearFilter !== null) {
+        var d = geoDistM(POIS[i].lat, POIS[i].lon, nearFilter.lat, nearFilter.lon);
+        if (d > NEAR_M) continue;
+      }
+      if (q && POIS[i].name.toLowerCase().indexOf(q) === -1) continue;
+      if (webOnly && !POIS[i].wiki && !POIS[i].web) continue;
+      visible.push(POIS[i]);
+    }
+    counter.textContent = visible.length;
+
+    // Update type filter buttons: show only types present after text+near filter
+    var typesInSearch = {};
+    Object.keys(TYPES).forEach(function(t) { typesInSearch[t] = false; });
+    for (var k = 0; k < POIS.length; k++) {
+      var p0 = POIS[k];
+      if (nearFilter !== null) {
+        var d0 = geoDistM(p0.lat, p0.lon, nearFilter.lat, nearFilter.lon);
+        if (d0 > NEAR_M) continue;
+      }
+      if (q && p0.name.toLowerCase().indexOf(q) === -1) continue;
+      if (webOnly && !p0.wiki && !p0.web) continue;
+      typesInSearch[p0.type] = true;
+    }
+    var filterBtns = document.querySelectorAll(".fbtn");
+    filterBtns.forEach(function(btn) {
+      var t = btn.getAttribute("data-type");
+      if (t) {
+        if (typesInSearch[t]) {
+          btn.classList.remove("hidden");
+        } else {
+          btn.classList.add("hidden");
+        }
+      }
+    });
+    for (var j = 0; j < visible.length; j++) {
+      (function(p) {
+        var m = L.marker([p.lat, p.lon], {icon: makeIcon(p.type)})
+                  .bindPopup(makePopupHTML(p))
+                  .addTo(map);
+        markers.push(m);
+
+        var row  = document.createElement("div");  row.className  = "item";
+        var ico  = document.createElement("div");  ico.className  = "ico";
+        var body = document.createElement("div");  body.style.flex = "1"; body.style.minWidth = "0";
+        var nm   = document.createElement("div");  nm.className   = "iname";
+        var mt   = document.createElement("div");  mt.className   = "imeta";
+        var ds   = document.createElement("div");  ds.className   = "idist";
+        var dc   = document.createElement("div");  dc.className   = "idesc";
+
+        var nav  = document.createElement("a");
+        nav.className = "inav";
+        nav.href   = NAV_URL(p);
+        nav.target = "_blank";
+        nav.title  = NAV_LABEL;
+        nav.innerHTML = "&#x27A1;";
+        nav.addEventListener("click", function(e) { e.stopPropagation(); });
+
+        ico.textContent = p.emoji;
+        nm.textContent  = p.name;
+        mt.textContent  = p.label;
+        if (p.dist > 0) ds.textContent = p.dist + " m dal percorso";
+        if (p.desc) dc.textContent = p.desc;
+        body.appendChild(nm); body.appendChild(mt); body.appendChild(ds);
+        if (p.desc) body.appendChild(dc);
+        if (p.hours) {
+          var hr = document.createElement("div");
+          hr.className = "ihours";
+          hr.textContent = "🕐 " + p.hours;
+          body.appendChild(hr);
+        }
+        if (p.phone) {
+          var ph = document.createElement("a");
+          ph.className = "iphone";
+          ph.href = "tel:" + p.phone;
+          ph.textContent = "📞 " + p.phone;
+          ph.addEventListener("click", function(e) { e.stopPropagation(); });
+          body.appendChild(ph);
+        }
+        if (p.wiki) {
+          var wparts = p.wiki.indexOf(":") !== -1 ? p.wiki.split(":") : ["it", p.wiki];
+          var wlang = wparts[0], wtitle = wparts.slice(1).join(":");
+          var wlink = document.createElement("a");
+          wlink.className = "iwiki";
+          wlink.href = "https://" + wlang + ".wikipedia.org/wiki/" + encodeURIComponent(wtitle);
+          wlink.target = "_blank";
+          wlink.textContent = "Wikipedia";
+          wlink.addEventListener("click", function(e) { e.stopPropagation(); });
+          body.appendChild(wlink);
+        }
+        if (p.web) {
+          var wblink = document.createElement("a");
+          wblink.className = "iwiki";
+          wblink.href = p.web;
+          wblink.target = "_blank";
+          wblink.textContent = "Sito web";
+          wblink.addEventListener("click", function(e) { e.stopPropagation(); });
+          body.appendChild(wblink);
+        }
+        row.appendChild(ico); row.appendChild(body); row.appendChild(nav);
+
+        m.on("click", function() {
+          if (selectedRow === row) {
+            deselectPOI();
+          } else {
+            selectPOI(row, m, p);
+          }
+        });
+
+        row.addEventListener("click", function() {
+          if (selectedRow === row) {
+            deselectPOI();
+          } else {
+            selectPOI(row, m, p);
+            map.setView([p.lat, p.lon], 16);
+            m.openPopup();
+          }
+        });
+        list.appendChild(row);
+      })(visible[j]);
+    }
+  }
+
+  var filterDiv = document.getElementById("filters");
+  Object.keys(TYPES).forEach(function(type) {
+    var cfg = TYPES[type];
+    var btn = document.createElement("button");
+    btn.className            = "fbtn";
+    btn.setAttribute("data-type", type);
+    btn.style.borderColor    = cfg.color;
+    btn.style.background     = cfg.color;
+    btn.style.color          = "#111";
+    btn.textContent          = cfg.emoji + " " + cfg.label;
+    btn.addEventListener("click", function() {
+      active[type]         = !active[type];
+      btn.style.background = active[type] ? cfg.color : "transparent";
+      btn.style.color      = active[type] ? "#111"    : "#eee";
+      render();
+    });
+    filterDiv.appendChild(btn);
+  });
+
+  render();
+
+  // Find — text search toggle
+  var findBtn    = document.getElementById("find-btn");
+  var searchBar  = document.getElementById("search-bar");
+  var searchInput = document.getElementById("search-input");
+  var findActive = false;
+
+  findBtn.addEventListener("click", function() {
+    findActive = !findActive;
+    if (findActive) {
+      findBtn.classList.add("active");
+      searchBar.classList.add("open");
+      searchInput.focus();
+    } else {
+      findBtn.classList.remove("active");
+      searchBar.classList.remove("open");
+      searchQuery = "";
+      searchInput.value = "";
+      render();
+    }
+  });
+
+  searchInput.addEventListener("input", function() {
+    searchQuery = searchInput.value;
+    render();
+  });
+
+  // Web — filter POIs with Wikipedia or website link
+  var webBtn = document.getElementById("web-btn");
+  webBtn.addEventListener("click", function() {
+    webOnly = !webOnly;
+    if (webOnly) {
+      webBtn.classList.add("active");
+    } else {
+      webBtn.classList.remove("active");
+    }
+    render();
+  });
+
+  // Near — geolocation + proximity filter
+  var locationMarker  = null;
+  var locationCircle  = null;
+  var locationWatcher = null;
+
+  function geoDistM(lat1, lon1, lat2, lon2) {
+    var R = 6371000;
+    var dLat = (lat2 - lat1) * Math.PI / 180;
+    var dLon = (lon2 - lon1) * Math.PI / 180;
+    var a = Math.sin(dLat/2)*Math.sin(dLat/2)
+          + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)
+          * Math.sin(dLon/2)*Math.sin(dLon/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  function updateLocationMarker(latlng, accuracy) {
+    if (locationMarker) {
+      locationMarker.setLatLng(latlng);
+      locationCircle.setLatLng(latlng).setRadius(accuracy);
+    } else {
+      locationCircle = L.circle(latlng, {
+        radius: accuracy, color: "#4ecca3", fillColor: "#4ecca3",
+        fillOpacity: 0.15, weight: 1
+      }).addTo(map);
+      locationMarker = L.circleMarker(latlng, {
+        radius: 7, color: "white", weight: 2,
+        fillColor: "#4ecca3", fillOpacity: 1
+      }).addTo(map);
+    }
+  }
+
+  function applyNearFilter(lat, lon, panMap) {
+    nearFilter = {lat: lat, lon: lon};
+    lastRenderLat = lat;
+    lastRenderLon = lon;
+    render();
+    if (panMap && !mapEl.classList.contains("collapsed")) {
+      // Fit map to visible markers
+      var bounds = [];
+      markers.forEach(function(m) { bounds.push(m.getLatLng()); });
+      if (bounds.length > 0) {
+        map.fitBounds(L.latLngBounds(bounds), {padding: [30, 30]});
+      } else {
+        map.setView([lat, lon], map.getZoom());
+      }
+    }
+  }
+
+  var centerBtn = document.getElementById("center-btn");
+  centerBtn.addEventListener("click", function() {
+    map.invalidateSize();
+    var latlngs = markers.map(function(m) { return m.getLatLng(); });
+    if (latlngs.length === 0) {
+      latlngs = TRACK.map(function(p) { return L.latLng(p[0], p[1]); });
+    }
+    if (latlngs.length === 1) {
+      map.setView(latlngs[0], 14);
+    } else if (latlngs.length > 1) {
+      map.flyToBounds(L.latLngBounds(latlngs), {padding: [30, 30], duration: 0.6});
+    }
+  });
+
+  var locBtn = document.getElementById("loc-btn");
+  locBtn.addEventListener("click", function() {
+    if (!navigator.geolocation) {
+      alert("Geolocalizzazione non supportata da questo browser.");
+      return;
+    }
+    if (nearActive) {
+      // Deactivate
+      if (locationWatcher !== null) { navigator.geolocation.clearWatch(locationWatcher); locationWatcher = null; }
+      if (locationMarker)  { locationMarker.remove();  locationMarker  = null; }
+      if (locationCircle)  { locationCircle.remove();  locationCircle  = null; }
+      nearActive    = false;
+      nearFilter    = null;
+      lastRenderLat = null;
+      lastRenderLon = null;
+      locBtn.classList.remove("active");
+      locBtn.title = "Filtra POI vicini";
+      render();
+    } else {
+      // Activate — show full list until first fix
+      nearActive = true;
+      locBtn.classList.add("active");
+      locBtn.title = "Disattiva filtro vicini";
+      locationWatcher = navigator.geolocation.watchPosition(
+        function(pos) {
+          var lat = pos.coords.latitude;
+          var lon = pos.coords.longitude;
+          updateLocationMarker(L.latLng(lat, lon), pos.coords.accuracy);
+          var isFirstFix = (lastRenderLat === null);
+          if (isFirstFix) {
+            // First fix: always apply filter + pan map
+            applyNearFilter(lat, lon, true);
+          } else {
+            // Subsequent fixes: re-render only if moved > NEAR_M/10
+            var moved = geoDistM(lat, lon, lastRenderLat, lastRenderLon);
+            if (moved > NEAR_M / 10) {
+              applyNearFilter(lat, lon, false);
+            } else {
+              // Just update marker position, no re-render
+              updateLocationMarker(L.latLng(lat, lon), pos.coords.accuracy);
+            }
+          }
+        },
+        function(err) {
+          nearActive = false;
+          locBtn.classList.remove("active");
+          var errMsg = err.message || "";
+          var errCodes = {1:"Permesso negato (abilita la localizzazione in Impostazioni \u2192 Privacy \u2192 Siti web di Safari)",
+                          2:"Posizione non disponibile", 3:"Timeout"};
+          alert("Errore geolocalizzazione: " + (errCodes[err.code] || errMsg || "codice " + err.code));
+        },
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+      );
+    }
+  });
+
+  // Map toggle (mobile only)
+  var toggleBtn = document.getElementById('map-toggle');
+  var mapVisible = true;
+  toggleBtn.classList.add('active');
+  toggleBtn.addEventListener('click', function() {
+    mapVisible = !mapVisible;
+    if (mapVisible) {
+      mapEl.classList.remove('collapsed');
+      toggleBtn.classList.add('active');
+      setTimeout(function() {
+        map.invalidateSize();
+        if (selectedRow) selectedRow.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 310);
+    } else {
+      mapEl.classList.add('collapsed');
+      toggleBtn.classList.remove('active');
+    }
+  });
+})();
+
+</script>
+</body>
+</html>
