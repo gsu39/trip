@@ -26,13 +26,13 @@ from datetime import datetime
 # POI TYPES — deve coincidere con lo script 1
 # ─────────────────────────────────────────────
 POI_TYPES = {
-    "viewpoint":  ("🏔️",  "Panoramico",        "#FF6B35"),
-    "museum":     ("🏛️",  "Museo",             "#9B59B6"),
-    "gallery":    ("🖼️",  "Galleria d'arte",   "#F44336"),
-    "artwork":    ("🎨",  "Arte/Monumento",    "#E91E63"),
-    "attraction": ("⭐",  "Attrazione",        "#2196F3"),
-    "historic":   ("🏰",  "Sito storico",      "#795548"),
+    "attraction": ("⭐",  "Attraction",        "#2196F3"),
+    "museum":     ("🏛️",  "Museum",            "#9B59B6"),
     "komoot":     ("🚴",  "Komoot",            "#6AA84F"),
+    "historic":   ("🏰",  "Historic",          "#795548"),
+    "viewpoint":  ("🏔️",  "Viewpoint",         "#FF6B35"),
+    "artwork":    ("🎨",  "Artwork",           "#E91E63"),
+    "gallery":    ("🖼️",  "Gallery",           "#F44336"),
 }
 
 POI_NS = "https://github.com/gpx-poi-extractor"
@@ -362,6 +362,7 @@ def export_html(pois, track, filepath, title="POI", nav="APPLE", near=5000, gpx_
         }
       }
     });
+    updateAllNoneBtn();
     for (var j = 0; j < visible.length; j++) {
       (function(p) {
         var m = L.marker([p.lat, p.lon], {icon: makeIcon(p.type)})
@@ -451,6 +452,40 @@ def export_html(pois, track, filepath, title="POI", nav="APPLE", near=5000, gpx_
   }
 
   var filterDiv = document.getElementById("filters");
+
+  // All / None button
+  var allNoneBtn = document.createElement("button");
+  allNoneBtn.className = "fbtn fbtn-allnone";
+  allNoneBtn.textContent = "None";
+  allNoneBtn.addEventListener("click", function() {
+    var visibleTypes = getVisibleTypes();
+    var allActive = visibleTypes.every(function(t) { return active[t]; });
+    visibleTypes.forEach(function(t) {
+      active[t] = !allActive;
+      var b = filterDiv.querySelector(".fbtn[data-type='" + t + "']");
+      if (b) {
+        b.style.background = active[t] ? TYPES[t].color : "transparent";
+        b.style.color      = active[t] ? "#111" : "#eee";
+      }
+    });
+    render();
+  });
+  filterDiv.appendChild(allNoneBtn);
+
+  function getVisibleTypes() {
+    var result = [];
+    filterDiv.querySelectorAll(".fbtn[data-type]").forEach(function(b) {
+      if (!b.classList.contains("hidden")) result.push(b.getAttribute("data-type"));
+    });
+    return result;
+  }
+
+  function updateAllNoneBtn() {
+    var visibleTypes = getVisibleTypes();
+    var allActive = visibleTypes.length > 0 && visibleTypes.every(function(t) { return active[t]; });
+    allNoneBtn.textContent = allActive ? "None" : "All";
+  }
+
   Object.keys(TYPES).forEach(function(type) {
     var cfg = TYPES[type];
     var btn = document.createElement("button");
@@ -488,13 +523,21 @@ def export_html(pois, track, filepath, title="POI", nav="APPLE", near=5000, gpx_
       searchBar.classList.remove("open");
       searchQuery = "";
       searchInput.value = "";
-      render();
+      if (foodActive) {
+        renderFoodSection(foodElements);
+      } else {
+        render();
+      }
     }
   });
 
   searchInput.addEventListener("input", function() {
     searchQuery = searchInput.value;
-    render();
+    if (foodActive) {
+      renderFoodSection(foodElements);
+    } else {
+      render();
+    }
   });
 
   // Web — filter POIs with Wikipedia or website link
@@ -560,9 +603,14 @@ def export_html(pois, track, filepath, title="POI", nav="APPLE", near=5000, gpx_
   var centerBtn = document.getElementById("center-btn");
   centerBtn.addEventListener("click", function() {
     map.invalidateSize();
-    var latlngs = markers.map(function(m) { return m.getLatLng(); });
-    if (latlngs.length === 0) {
-      latlngs = TRACK.map(function(p) { return L.latLng(p[0], p[1]); });
+    var latlngs;
+    if (foodActive) {
+      latlngs = foodMarkers.map(function(m) { return m.getLatLng(); });
+    } else {
+      latlngs = markers.map(function(m) { return m.getLatLng(); });
+      if (latlngs.length === 0) {
+        latlngs = TRACK.map(function(p) { return L.latLng(p[0], p[1]); });
+      }
     }
     if (latlngs.length === 1) {
       map.setView(latlngs[0], 14);
@@ -627,6 +675,393 @@ def export_html(pois, track, filepath, title="POI", nav="APPLE", near=5000, gpx_
     }
   });
 
+  // ── FOOD ──────────────────────────────────────────
+  var FOOD_RADIUS   = 5000;   // metri (primo tentativo)
+  var FOOD_RADIUS_RETRY = 1000; // metri (secondo tentativo dopo errore)
+  var foodActive    = false;
+  var foodMarkers   = [];
+  var foodElements  = [];     // cache elementi Overpass per ri-filtrare
+  var foodLat       = null;
+  var foodLon       = null;
+  var foodRadiusUsed = FOOD_RADIUS; // raggio effettivamente usato (per header lista)
+  var foodBtn       = document.getElementById("food-btn");
+
+  var FOOD_CATS = [
+    { key: "restaurant", emoji: "🍽️", label: "Ristorante", color: "#e8623a" },
+    { key: "bar",        emoji: "🍷", label: "Bar",         color: "#c0392b" },
+    { key: "cafe",       emoji: "☕", label: "Caffè",       color: "#a0522d" },
+    { key: "fast_food",  emoji: "🍔", label: "Fast food",   color: "#e67e22" },
+    { key: "supermarket",emoji: "🛒", label: "Supermercato",color: "#27ae60" },
+    { key: "convenience",emoji: "🏪", label: "Alimentari",  color: "#16a085" },
+    { key: "bakery",     emoji: "🥐", label: "Panetteria",  color: "#d4a017" },
+  ];
+
+  function foodCatInfo(tags) {
+    var amenity = tags.amenity || "";
+    var shop    = tags.shop    || "";
+    for (var i = 0; i < FOOD_CATS.length; i++) {
+      var c = FOOD_CATS[i];
+      if (amenity === c.key || shop === c.key) return c;
+    }
+    return { key: "other", emoji: "🍴", label: "Locale", color: "#e8623a" };
+  }
+
+  var foodLocationWatcher = null;
+
+  function enterFoodMode() {
+    // Nascondi POI dalla mappa
+    markers.forEach(function(m) { m.remove(); });
+    // Svuota la lista POI
+    document.getElementById("list").innerHTML = "";
+    // Nascondi barra filtri
+    document.getElementById("filters").style.display = "none";
+    // Disabilita Near e Web
+    locBtn.disabled = true;
+    locBtn.style.opacity = "0.4";
+    webBtn.disabled = true;
+    webBtn.style.opacity = "0.4";
+    // Avvia aggiornamento posizione ogni 15s
+    if (navigator.geolocation) {
+      foodLocationWatcher = navigator.geolocation.watchPosition(
+        function(pos) {
+          updateLocationMarker(L.latLng(pos.coords.latitude, pos.coords.longitude), pos.coords.accuracy);
+        },
+        function() {},
+        { enableHighAccuracy: true, maximumAge: 15000, timeout: 15000 }
+      );
+    }
+    // Messaggio ricerca in corso + pulsante Cancel
+    var list = document.getElementById("list");
+    list.innerHTML = '';
+    var msg = document.createElement("div");
+    msg.id = "food-searching";
+    msg.style.cssText = "padding:18px 14px; font-size:0.8rem; color:#e8623a; display:flex; align-items:center; gap:10px;";
+    var msgTxt = document.createElement("span");
+    msgTxt.id = "food-searching-txt";
+    msgTxt.textContent = "🍽️ Ricerca Food entro " + foodRadiusUsed + " m…";
+    var cancelBtn = document.createElement("button");
+    cancelBtn.textContent = "✕ Cancel";
+    cancelBtn.style.cssText = "background:transparent; border:1px solid #e8623a; border-radius:4px; color:#e8623a; font-size:0.7rem; padding:3px 7px; cursor:pointer; flex-shrink:0;";
+    cancelBtn.addEventListener("click", function() {
+      foodActive = false;
+      foodBtn.classList.remove("active");
+      foodBtn.innerHTML = "<span class='btn-ico'>🍽️</span><span class='btn-lbl'>Food</span>";
+      foodBtn.disabled = false;
+      clearFood();
+      exitFoodMode();
+    });
+    msg.appendChild(msgTxt);
+    msg.appendChild(cancelBtn);
+    list.appendChild(msg);
+  }
+
+  function exitFoodMode() {
+    // Ferma aggiornamento posizione
+    if (foodLocationWatcher !== null) {
+      navigator.geolocation.clearWatch(foodLocationWatcher);
+      foodLocationWatcher = null;
+    }
+    // Rimuovi marker posizione se Near non è attivo
+    if (!nearActive) {
+      if (locationMarker) { locationMarker.remove(); locationMarker = null; }
+      if (locationCircle) { locationCircle.remove(); locationCircle = null; }
+    }
+    // Ripristina filtri visibili
+    document.getElementById("filters").style.display = "";
+    // Riabilita Near e Web
+    locBtn.disabled = false;
+    locBtn.style.opacity = "";
+    webBtn.disabled = false;
+    webBtn.style.opacity = "";
+    // Ridisegna i POI normali
+    render();
+  }
+
+  function clearFood() {
+    foodMarkers.forEach(function(m) { m.remove(); });
+    foodMarkers = [];
+    var sec = document.getElementById("food-section");
+    if (sec) sec.remove();
+  }
+
+  function zoomOnFood() {
+    var latlngs = foodMarkers.map(function(m) { return m.getLatLng(); });
+    if (latlngs.length === 1) {
+      map.setView(latlngs[0], 15);
+    } else if (latlngs.length > 1) {
+      map.flyToBounds(L.latLngBounds(latlngs), {padding: [40, 40], duration: 0.6});
+    }
+  }
+
+  function makeFoodPopup(el, cat) {
+    var tags = el.tags || {};
+    var name = tags.name || cat.label;
+    var s = _o + "b" + _c + cat.emoji + " " + name + _o + "/b" + _c
+          + _o + "br" + _c + _o + "small style='color:#555'" + _c + cat.label + _o + "/small" + _c;
+    if (tags.cuisine)
+      s += _o + "br" + _c + _o + "small style='color:#888'" + _c + "🍴 " + tags.cuisine.replace(/;/g,", ") + _o + "/small" + _c;
+    if (tags.opening_hours)
+      s += _o + "br" + _c + _o + "small style='color:#888'" + _c + "🕐 " + tags.opening_hours + _o + "/small" + _c;
+    if (tags.phone || tags["contact:phone"])
+      s += _o + "br" + _c + _o + "a href='tel:" + (tags.phone||tags["contact:phone"]) + "' style='font-size:0.8em'" + _c
+        + "📞 " + (tags.phone||tags["contact:phone"]) + _o + "/a" + _c;
+    if (tags.website || tags["contact:website"])
+      s += _o + "br" + _c + _o + "a href='" + (tags.website||tags["contact:website"]) + "' target='_blank' style='font-size:0.8em'" + _c + "Sito web" + _o + "/a" + _c;
+    return s;
+  }
+
+  function makeFoodIcon(cat) {
+    return L.divIcon({
+      html: _o + "div style='background:" + cat.color + ";width:26px;height:26px;"
+          + "border-radius:50%;display:flex;align-items:center;justify-content:center;"
+          + "border:2px solid white;box-shadow:0 2px 5px rgba(0,0,0,0.35)'" + _c
+          + _o + "span style='font-size:13px;line-height:26px'" + _c + cat.emoji + _o + "/span" + _c
+          + _o + "/div" + _c,
+      iconSize: [26,26], iconAnchor: [13,13], className: ""
+    });
+  }
+
+  function renderFoodSection(elements) {
+    // Salva sempre gli elementi originali (non filtrati) per ri-filtrare
+    if (elements !== foodElements) foodElements = elements;
+
+    var old = document.getElementById("food-section");
+    if (old) old.remove();
+    var searching = document.getElementById("food-searching");
+    if (searching) searching.remove();
+
+    // Applica filtro testo se attivo
+    var q = searchQuery.trim().toLowerCase();
+    var filtered = q ? elements.filter(function(el) {
+      var name = (el.tags && el.tags.name) ? el.tags.name.toLowerCase() : "";
+      return name.indexOf(q) !== -1;
+    }) : elements;
+
+    var sec = document.createElement("div");
+    sec.id = "food-section";
+
+    var hdr = document.createElement("div");
+    hdr.className = "food-hdr";
+    var radiusLabel = "Entro " + foodRadiusUsed + " m";
+    hdr.textContent = "🍽️ " + radiusLabel + " (" + filtered.length + (q ? "/" + elements.length : "") + ")";
+    sec.appendChild(hdr);
+
+    if (filtered.length === 0) {
+      var empty = document.createElement("div");
+      empty.className = "food-empty";
+      empty.textContent = q ? 'Nessun risultato per "' + q + '"' : "Nessun locale trovato entro " + foodRadiusUsed + " m";
+      sec.appendChild(empty);
+      document.getElementById("list").appendChild(sec);
+      // Rimuovi marker precedenti
+      foodMarkers.forEach(function(m) { m.remove(); });
+      foodMarkers = [];
+      return;
+    }
+
+    // Rimuovi marker precedenti e ricrea solo quelli filtrati
+    foodMarkers.forEach(function(m) { m.remove(); });
+    foodMarkers = [];
+
+    filtered.forEach(function(el) {
+      var tags = el.tags || {};
+      var cat  = foodCatInfo(tags);
+      var name = tags.name || cat.label;
+      var lat  = el.lat || (el.center && el.center.lat);
+      var lon  = el.lon || (el.center && el.center.lon);
+      if (!lat || !lon) return;
+
+      // Marker sulla mappa
+      var m = L.marker([lat, lon], { icon: makeFoodIcon(cat) })
+                .bindPopup(makeFoodPopup(el, cat))
+                .addTo(map);
+      foodMarkers.push(m);
+
+      // Riga in sidebar
+      var row  = document.createElement("div");  row.className = "item food-item";
+      var ico  = document.createElement("div");  ico.className = "ico";
+      var body = document.createElement("div");  body.style.flex = "1"; body.style.minWidth = "0";
+      var nm   = document.createElement("div");  nm.className = "iname";
+      var mt   = document.createElement("div");  mt.className = "imeta";
+      var ds   = document.createElement("div");  ds.className = "idist";
+
+      ico.textContent = cat.emoji;
+      nm.textContent  = name;
+      var meta = cat.label;
+      if (tags.cuisine) meta += " · " + tags.cuisine.replace(/;/g,", ");
+      mt.textContent = meta;
+
+      var distM = Math.round(geoDistM(foodLat, foodLon, lat, lon));
+      ds.textContent = distM >= 1000
+        ? (distM / 1000).toFixed(1) + " km"
+        : distM + " m";
+
+      var nav = document.createElement("a");
+      nav.className = "inav";
+      nav.href   = NAV_URL({ lat: lat, lon: lon, name: name });
+      nav.target = "_blank";
+      nav.title  = NAV_LABEL;
+      nav.innerHTML = "&#x27A1;";
+      nav.addEventListener("click", function(e) { e.stopPropagation(); });
+
+      if (tags.opening_hours) {
+        var hr = document.createElement("div"); hr.className = "ihours";
+        hr.textContent = "🕐 " + tags.opening_hours; body.appendChild(hr);
+      }
+      if (tags.phone || tags["contact:phone"]) {
+        var ph = document.createElement("a"); ph.className = "iphone";
+        ph.href = "tel:" + (tags.phone||tags["contact:phone"]);
+        ph.textContent = "📞 " + (tags.phone||tags["contact:phone"]);
+        ph.addEventListener("click", function(e) { e.stopPropagation(); });
+        body.appendChild(ph);
+      }
+      if (tags.website || tags["contact:website"]) {
+        var wb = document.createElement("a"); wb.className = "iwiki";
+        wb.href = tags.website||tags["contact:website"]; wb.target = "_blank";
+        wb.textContent = "Sito web";
+        wb.addEventListener("click", function(e) { e.stopPropagation(); });
+        body.appendChild(wb);
+      }
+
+      body.insertBefore(nm, body.firstChild);
+      body.insertBefore(mt, nm.nextSibling);
+      body.insertBefore(ds, mt.nextSibling);
+      row.appendChild(ico); row.appendChild(body); row.appendChild(nav);
+
+      row.addEventListener("click", function() {
+        if (row.classList.contains("selected")) {
+          row.classList.remove("selected"); m.closePopup();
+        } else {
+          document.querySelectorAll(".food-item.selected").forEach(function(r){ r.classList.remove("selected"); });
+          row.classList.add("selected");
+          row.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          map.setView([lat, lon], 16);
+          m.openPopup();
+        }
+      });
+      m.on("click", function() {
+        document.querySelectorAll(".food-item.selected").forEach(function(r){ r.classList.remove("selected"); });
+        row.classList.add("selected");
+        row.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+
+      sec.appendChild(row);
+    });
+
+    document.getElementById("list").appendChild(sec);
+    // Zoom sui POIFood
+    zoomOnFood();
+  }
+
+  function buildOverpassQuery(lat, lon, r) {
+    return '[out:json][timeout:15];'
+         + '('
+         + 'node[amenity~"^(restaurant|bar|cafe|fast_food)$"](around:' + r + ',' + lat + ',' + lon + ');'
+         + 'node[shop~"^(supermarket|convenience|bakery)$"](around:'  + r + ',' + lat + ',' + lon + ');'
+         + 'way[amenity~"^(restaurant|bar|cafe|fast_food)$"](around:'  + r + ',' + lat + ',' + lon + ');'
+         + 'way[shop~"^(supermarket|convenience|bakery)$"](around:'    + r + ',' + lat + ',' + lon + ');'
+         + ');'
+         + 'out center tags;';
+  }
+
+  function processOverpassResult(data, lat, lon) {
+    var els = (data.elements || []).filter(function(e) {
+      return e.tags && e.tags.name;
+    });
+    els.sort(function(a, b) {
+      var aLat = a.lat||(a.center&&a.center.lat)||lat;
+      var aLon = a.lon||(a.center&&a.center.lon)||lon;
+      var bLat = b.lat||(b.center&&b.center.lat)||lat;
+      var bLon = b.lon||(b.center&&b.center.lon)||lon;
+      return geoDistM(lat,lon,aLat,aLon) - geoDistM(lat,lon,bLat,bLon);
+    });
+    return els;
+  }
+
+  function queryFood(lat, lon) {
+    foodBtn.textContent = "…";
+    foodBtn.disabled = true;
+    foodRadiusUsed = FOOD_RADIUS;
+
+    fetch("https://overpass-api.de/api/interpreter", {
+      method: "POST",
+      body: "data=" + encodeURIComponent(buildOverpassQuery(lat, lon, FOOD_RADIUS))
+    })
+    .then(function(resp) {
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      return resp.json();
+    })
+    .then(function(data) {
+      if (data.elements === undefined) throw new Error("risposta non valida");
+      foodRadiusUsed = FOOD_RADIUS;
+      renderFoodSection(processOverpassResult(data, lat, lon));
+      foodBtn.innerHTML = "<span class='btn-ico'>🍽️</span><span class='btn-lbl'>Food</span>";
+      foodBtn.disabled = false;
+    })
+    .catch(function() {
+      // Primo errore: attendi 30s e riprova con raggio ridotto
+      var msgTxt = document.getElementById("food-searching-txt");
+      if (msgTxt) msgTxt.textContent = "🍽️ Riprovo entro " + FOOD_RADIUS_RETRY + " m… (30s)";
+      setTimeout(function() {
+        if (!foodActive) return; // utente ha già annullato
+        foodRadiusUsed = FOOD_RADIUS_RETRY;
+        fetch("https://overpass-api.de/api/interpreter", {
+          method: "POST",
+          body: "data=" + encodeURIComponent(buildOverpassQuery(lat, lon, FOOD_RADIUS_RETRY))
+        })
+        .then(function(resp) {
+          if (!resp.ok) throw new Error("HTTP " + resp.status);
+          return resp.json();
+        })
+        .then(function(data) {
+          if (data.elements === undefined) throw new Error("risposta non valida");
+          renderFoodSection(processOverpassResult(data, lat, lon));
+          foodBtn.innerHTML = "<span class='btn-ico'>🍽️</span><span class='btn-lbl'>Food</span>";
+          foodBtn.disabled = false;
+        })
+        .catch(function() {
+          foodBtn.innerHTML = "<span class='btn-ico'>🍽️</span><span class='btn-lbl'>Food</span>";
+          foodBtn.disabled = false;
+          foodActive = false;
+          foodBtn.classList.remove("active");
+          clearFood();
+          exitFoodMode();
+          alert("Errore nella ricerca locali. Controlla la connessione.");
+        });
+      }, 30000);
+    });
+  }
+
+  foodBtn.addEventListener("click", function() {
+    if (foodActive) {
+      foodActive = false;
+      foodBtn.classList.remove("active");
+      clearFood();
+      exitFoodMode();
+      return;
+    }
+    if (!navigator.geolocation) {
+      alert("Geolocalizzazione non supportata da questo browser.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      function(pos) {
+        foodLat = pos.coords.latitude;
+        foodLon = pos.coords.longitude;
+        foodActive = true;
+        foodBtn.classList.add("active");
+        enterFoodMode();
+        // Mostra subito la posizione con il fix già ottenuto
+        updateLocationMarker(L.latLng(foodLat, foodLon), pos.coords.accuracy);
+        queryFood(foodLat, foodLon);
+      },
+      function(err) {
+        var errCodes = {1:"Permesso negato", 2:"Posizione non disponibile", 3:"Timeout"};
+        alert("Errore geolocalizzazione: " + (errCodes[err.code] || err.message));
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  });
+
   // Map toggle (mobile only)
   var toggleBtn = document.getElementById('map-toggle');
   var mapVisible = true;
@@ -681,6 +1116,7 @@ def export_html(pois, track, filepath, title="POI", nav="APPLE", near=5000, gpx_
     lines.append('#poi-count { font-size: 0.78rem; font-weight: 700; color: #4ecca3; flex: 1; white-space: nowrap; }')
     lines.append('.fbtn { padding: 4px 9px; border-radius: 20px; border: 1px solid;')
     lines.append('        font-size: 0.7rem; cursor: pointer; appearance: none; -webkit-appearance: none; }')
+    lines.append('.fbtn-allnone { padding: 4px 7px; border-color: #4ecca3; background: transparent; color: #4ecca3; font-weight: 700; letter-spacing: 0.03em; }')
     lines.append('#list { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }')
     lines.append('.item { padding: 10px 12px; border-bottom: 1px solid #0f3460; cursor: pointer;')
     lines.append('        display: flex; gap: 8px; align-items: flex-start; transition: background 0.15s; }')
@@ -705,7 +1141,15 @@ def export_html(pois, track, filepath, title="POI", nav="APPLE", near=5000, gpx_
     lines.append('#find-btn.active { background: #4ecca3; color: #111; }')
     lines.append('#web-btn { transition: background 0.2s, color 0.2s; }')
     lines.append('#web-btn.active { background: #4ecca3; color: #111; }')
+    lines.append('#food-btn { transition: background 0.2s, color 0.2s; }')
+    lines.append('#food-btn.active { background: #e8623a; border-color: #e8623a; color: #fff; }')
+    lines.append('#food-btn:disabled { opacity: 0.6; cursor: wait; }')
     lines.append('#map-toggle.active { background: #4ecca3; color: #111; }')
+    lines.append('.food-hdr { padding: 7px 12px; font-size: 0.72rem; font-weight: 700; color: #e8623a;')
+    lines.append('            background: #1a1a2e; border-top: 2px solid #e8623a; border-bottom: 1px solid #0f3460; }')
+    lines.append('.food-empty { padding: 10px 12px; font-size: 0.72rem; color: #666; }')
+    lines.append('.food-item { border-left: 3px solid #e8623a; padding-left: 9px; }')
+    lines.append('.food-item.selected { background: rgba(232,98,58,0.18); }')
     lines.append('.inav  { display: none; margin-left: auto; flex-shrink: 0; align-self: center;')
     lines.append('         background: #e94560; border: none; border-radius: 50%; width: 28px; height: 28px;')
     lines.append('         font-size: 0.85rem; cursor: pointer; color: white; text-decoration: none;')
@@ -736,6 +1180,7 @@ def export_html(pois, track, filepath, title="POI", nav="APPLE", near=5000, gpx_
     lines.append('      <button id="center-btn" class="hdr-btn" title="Centra la mappa su tutti i POI"><span class=\"btn-ico\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><line x1=\"12\" y1=\"2\" x2=\"12\" y2=\"7\"/><polyline points=\"9 5 12 2 15 5\"/><line x1=\"12\" y1=\"22\" x2=\"12\" y2=\"17\"/><polyline points=\"15 19 12 22 9 19\"/><line x1=\"2\" y1=\"12\" x2=\"7\" y2=\"12\"/><polyline points=\"5 9 2 12 5 15\"/><line x1=\"22\" y1=\"12\" x2=\"17\" y2=\"12\"/><polyline points=\"19 15 22 12 19 9\"/></svg></span><span class=\"btn-lbl\">Center</span></button>')
     lines.append('      <button id="loc-btn" class="hdr-btn" title="Filtra POI vicini"><span class=\"btn-ico\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 73.9258 98.7793\" width=\"14\" height=\"18\"><path d=\"M73.9258 74.8535C73.9258 85.0586 58.6426 92.2363 37.0117 92.2363C15.332 92.2363 0 85.0586 0 74.8535C0 66.4078 10.6024 60.0556 26.6602 58.1715L26.6602 59.4727C26.6602 61.5469 26.7423 63.4603 26.9162 65.1936C16.3275 66.6803 9.0332 70.4751 9.0332 74.8535C9.0332 80.6152 21.2402 85.2539 36.9629 85.2539C52.6367 85.2539 64.8926 80.5664 64.8926 74.8535C64.8926 70.5032 57.5364 66.6804 46.9187 65.1898C47.0883 63.4575 47.168 61.5454 47.168 59.4727L47.168 58.1528C63.2824 60.0108 73.9258 66.378 73.9258 74.8535Z\" fill=\"currentColor\"/><path d=\"M52.2461 21.4844C52.2461 28.5156 47.5098 34.4727 41.0156 36.2793L41.0156 57.6172C41.0156 70.5566 38.7207 77.5879 36.9629 77.5879C35.1562 77.5879 32.8613 70.5078 32.8613 57.6172L32.8613 36.2793C26.3672 34.4238 21.6797 28.5156 21.6797 21.4844C21.6797 13.0371 28.4668 6.15234 36.9629 6.15234C45.459 6.15234 52.2461 13.0371 52.2461 21.4844ZM27.4414 17.1387C27.4414 19.9707 29.8828 22.4121 32.666 22.4121C35.5469 22.4121 37.8906 19.9707 37.8906 17.1387C37.8906 14.3066 35.5469 11.9141 32.666 11.9141C29.8828 11.9141 27.4414 14.3066 27.4414 17.1387Z\" fill=\"currentColor\"/></svg></span><span class=\"btn-lbl\">Near</span></button>')
     lines.append('      <button id="web-btn" class="hdr-btn" title="Solo POI con link Wikipedia o sito web"><span class=\"btn-ico\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 3c-2.5 3-4 5.5-4 9s1.5 6 4 9\"/><path d=\"M12 3c2.5 3 4 5.5 4 9s-1.5 6-4 9\"/><line x1=\"3\" y1=\"9\" x2=\"21\" y2=\"9\"/><line x1=\"3\" y1=\"15\" x2=\"21\" y2=\"15\"/></svg></span><span class=\"btn-lbl\">Web</span></button>')
+    lines.append('      <button id="food-btn" class="hdr-btn" title="Ristoranti e locali nelle vicinanze (1 km)"><span class=\"btn-ico\">🍽️</span><span class=\"btn-lbl\">Food</span></button>')
     lines.append('      <button id="map-toggle" class="hdr-btn" title="Mappa"><span class=\"btn-ico\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 81.1523 76.3184\" width=\"19\" height=\"18\"><path d=\"M4.73633 74.8535C5.81055 74.8535 6.83594 74.5117 8.20312 73.7793L27.5391 63.4277L48.877 75.1465C50.3418 75.9277 51.9043 76.3184 53.418 76.3184C54.834 76.3184 56.25 75.9766 57.373 75.3418L77.5391 64.0137C79.9805 62.6465 81.1523 60.5469 81.1523 57.8125L81.1523 6.29883C81.1523 3.22266 79.4434 1.51367 76.3672 1.51367C75.3418 1.51367 74.2676 1.85547 72.9004 2.58789L52.5879 13.9648L31.5918 1.07422C30.4688 0.390625 29.1016 0.0488281 27.7344 0.0488281C26.3184 0.0488281 24.9023 0.390625 23.7305 1.07422L3.61328 12.4023C1.12305 13.7695 0 15.8691 0 18.5547L0 70.0684C0 73.1445 1.70898 74.8535 4.73633 74.8535ZM24.707 56.4453L8.05664 65.5273C7.86133 65.625 7.66602 65.7227 7.51953 65.7227C7.17773 65.7227 7.03125 65.5273 7.03125 65.1855L7.03125 20.3613C7.03125 19.4336 7.42188 18.75 8.30078 18.2129L23.3398 9.57031C23.8281 9.27734 24.2676 9.0332 24.707 8.74023ZM31.7871 57.1777L31.7871 9.7168C32.1777 9.96094 32.6172 10.2051 33.0078 10.4492L49.3652 20.4102L49.3652 66.8457C48.7793 66.5039 48.1934 66.2109 47.6074 65.8691ZM56.3965 67.6758L56.3965 19.9707L73.0957 10.8398C73.291 10.7422 73.4863 10.6445 73.6328 10.6445C73.9258 10.6445 74.0723 10.8398 74.0723 11.1816L74.0723 56.0547C74.0723 56.9824 73.7305 57.666 72.8516 58.2031L58.252 66.6016C57.666 66.9922 57.0312 67.334 56.3965 67.6758Z\" fill=\"currentColor\"/></svg></span><span class=\"btn-lbl\">Map</span></button>')
     lines.append('    </div>')
     lines.append('  </div>')

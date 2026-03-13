@@ -416,13 +416,21 @@ window.NAV_URL   = function(p) { return "https://maps.apple.com/?ll="+p.lat+","+
       searchBar.classList.remove("open");
       searchQuery = "";
       searchInput.value = "";
-      render();
+      if (foodActive) {
+        renderFoodSection(foodElements);
+      } else {
+        render();
+      }
     }
   });
 
   searchInput.addEventListener("input", function() {
     searchQuery = searchInput.value;
-    render();
+    if (foodActive) {
+      renderFoodSection(foodElements);
+    } else {
+      render();
+    }
   });
 
   // Web — filter POIs with Wikipedia or website link
@@ -488,9 +496,14 @@ window.NAV_URL   = function(p) { return "https://maps.apple.com/?ll="+p.lat+","+
   var centerBtn = document.getElementById("center-btn");
   centerBtn.addEventListener("click", function() {
     map.invalidateSize();
-    var latlngs = markers.map(function(m) { return m.getLatLng(); });
-    if (latlngs.length === 0) {
-      latlngs = TRACK.map(function(p) { return L.latLng(p[0], p[1]); });
+    var latlngs;
+    if (foodActive) {
+      latlngs = foodMarkers.map(function(m) { return m.getLatLng(); });
+    } else {
+      latlngs = markers.map(function(m) { return m.getLatLng(); });
+      if (latlngs.length === 0) {
+        latlngs = TRACK.map(function(p) { return L.latLng(p[0], p[1]); });
+      }
     }
     if (latlngs.length === 1) {
       map.setView(latlngs[0], 14);
@@ -556,11 +569,14 @@ window.NAV_URL   = function(p) { return "https://maps.apple.com/?ll="+p.lat+","+
   });
 
   // ── FOOD ──────────────────────────────────────────
-  var FOOD_RADIUS   = 6000;   // metri (TEST — ripristinare a 1000)
+  var FOOD_RADIUS   = 5000;   // metri (primo tentativo)
+  var FOOD_RADIUS_RETRY = 1000; // metri (secondo tentativo dopo errore)
   var foodActive    = false;
   var foodMarkers   = [];
+  var foodElements  = [];     // cache elementi Overpass per ri-filtrare
   var foodLat       = null;
   var foodLon       = null;
+  var foodRadiusUsed = FOOD_RADIUS; // raggio effettivamente usato (per header lista)
   var foodBtn       = document.getElementById("food-btn");
 
   var FOOD_CATS = [
@@ -583,11 +599,91 @@ window.NAV_URL   = function(p) { return "https://maps.apple.com/?ll="+p.lat+","+
     return { key: "other", emoji: "🍴", label: "Locale", color: "#e8623a" };
   }
 
+  var foodLocationWatcher = null;
+
+  function enterFoodMode() {
+    // Nascondi POI dalla mappa
+    markers.forEach(function(m) { m.remove(); });
+    // Svuota la lista POI
+    document.getElementById("list").innerHTML = "";
+    // Nascondi barra filtri
+    document.getElementById("filters").style.display = "none";
+    // Disabilita Near e Web
+    locBtn.disabled = true;
+    locBtn.style.opacity = "0.4";
+    webBtn.disabled = true;
+    webBtn.style.opacity = "0.4";
+    // Avvia aggiornamento posizione ogni 15s
+    if (navigator.geolocation) {
+      foodLocationWatcher = navigator.geolocation.watchPosition(
+        function(pos) {
+          updateLocationMarker(L.latLng(pos.coords.latitude, pos.coords.longitude), pos.coords.accuracy);
+        },
+        function() {},
+        { enableHighAccuracy: true, maximumAge: 15000, timeout: 15000 }
+      );
+    }
+    // Messaggio ricerca in corso + pulsante Cancel
+    var list = document.getElementById("list");
+    list.innerHTML = '';
+    var msg = document.createElement("div");
+    msg.id = "food-searching";
+    msg.style.cssText = "padding:18px 14px; font-size:0.8rem; color:#e8623a; display:flex; align-items:center; gap:10px;";
+    var msgTxt = document.createElement("span");
+    msgTxt.id = "food-searching-txt";
+    msgTxt.textContent = "🍽️ Ricerca Food entro " + foodRadiusUsed + " m…";
+    var cancelBtn = document.createElement("button");
+    cancelBtn.textContent = "✕ Cancel";
+    cancelBtn.style.cssText = "background:transparent; border:1px solid #e8623a; border-radius:4px; color:#e8623a; font-size:0.7rem; padding:3px 7px; cursor:pointer; flex-shrink:0;";
+    cancelBtn.addEventListener("click", function() {
+      foodActive = false;
+      foodBtn.classList.remove("active");
+      foodBtn.innerHTML = "<span class='btn-ico'>🍽️</span><span class='btn-lbl'>Food</span>";
+      foodBtn.disabled = false;
+      clearFood();
+      exitFoodMode();
+    });
+    msg.appendChild(msgTxt);
+    msg.appendChild(cancelBtn);
+    list.appendChild(msg);
+  }
+
+  function exitFoodMode() {
+    // Ferma aggiornamento posizione
+    if (foodLocationWatcher !== null) {
+      navigator.geolocation.clearWatch(foodLocationWatcher);
+      foodLocationWatcher = null;
+    }
+    // Rimuovi marker posizione se Near non è attivo
+    if (!nearActive) {
+      if (locationMarker) { locationMarker.remove(); locationMarker = null; }
+      if (locationCircle) { locationCircle.remove(); locationCircle = null; }
+    }
+    // Ripristina filtri visibili
+    document.getElementById("filters").style.display = "";
+    // Riabilita Near e Web
+    locBtn.disabled = false;
+    locBtn.style.opacity = "";
+    webBtn.disabled = false;
+    webBtn.style.opacity = "";
+    // Ridisegna i POI normali
+    render();
+  }
+
   function clearFood() {
     foodMarkers.forEach(function(m) { m.remove(); });
     foodMarkers = [];
     var sec = document.getElementById("food-section");
     if (sec) sec.remove();
+  }
+
+  function zoomOnFood() {
+    var latlngs = foodMarkers.map(function(m) { return m.getLatLng(); });
+    if (latlngs.length === 1) {
+      map.setView(latlngs[0], 15);
+    } else if (latlngs.length > 1) {
+      map.flyToBounds(L.latLngBounds(latlngs), {padding: [40, 40], duration: 0.6});
+    }
   }
 
   function makeFoodPopup(el, cat) {
@@ -619,27 +715,47 @@ window.NAV_URL   = function(p) { return "https://maps.apple.com/?ll="+p.lat+","+
   }
 
   function renderFoodSection(elements) {
+    // Salva sempre gli elementi originali (non filtrati) per ri-filtrare
+    if (elements !== foodElements) foodElements = elements;
+
     var old = document.getElementById("food-section");
     if (old) old.remove();
+    var searching = document.getElementById("food-searching");
+    if (searching) searching.remove();
+
+    // Applica filtro testo se attivo
+    var q = searchQuery.trim().toLowerCase();
+    var filtered = q ? elements.filter(function(el) {
+      var name = (el.tags && el.tags.name) ? el.tags.name.toLowerCase() : "";
+      return name.indexOf(q) !== -1;
+    }) : elements;
 
     var sec = document.createElement("div");
     sec.id = "food-section";
 
     var hdr = document.createElement("div");
     hdr.className = "food-hdr";
-    hdr.textContent = "🍽️ Nelle vicinanze (" + elements.length + ")";
+    var radiusLabel = "Entro " + foodRadiusUsed + " m";
+    hdr.textContent = "🍽️ " + radiusLabel + " (" + filtered.length + (q ? "/" + elements.length : "") + ")";
     sec.appendChild(hdr);
 
-    if (elements.length === 0) {
+    if (filtered.length === 0) {
       var empty = document.createElement("div");
       empty.className = "food-empty";
-      empty.textContent = "Nessun locale trovato entro " + FOOD_RADIUS + " m";
+      empty.textContent = q ? 'Nessun risultato per "' + q + '"' : "Nessun locale trovato entro " + foodRadiusUsed + " m";
       sec.appendChild(empty);
       document.getElementById("list").appendChild(sec);
+      // Rimuovi marker precedenti
+      foodMarkers.forEach(function(m) { m.remove(); });
+      foodMarkers = [];
       return;
     }
 
-    elements.forEach(function(el) {
+    // Rimuovi marker precedenti e ricrea solo quelli filtrati
+    foodMarkers.forEach(function(m) { m.remove(); });
+    foodMarkers = [];
+
+    filtered.forEach(function(el) {
       var tags = el.tags || {};
       var cat  = foodCatInfo(tags);
       var name = tags.name || cat.label;
@@ -659,12 +775,18 @@ window.NAV_URL   = function(p) { return "https://maps.apple.com/?ll="+p.lat+","+
       var body = document.createElement("div");  body.style.flex = "1"; body.style.minWidth = "0";
       var nm   = document.createElement("div");  nm.className = "iname";
       var mt   = document.createElement("div");  mt.className = "imeta";
+      var ds   = document.createElement("div");  ds.className = "idist";
 
       ico.textContent = cat.emoji;
       nm.textContent  = name;
       var meta = cat.label;
       if (tags.cuisine) meta += " · " + tags.cuisine.replace(/;/g,", ");
       mt.textContent = meta;
+
+      var distM = Math.round(geoDistM(foodLat, foodLon, lat, lon));
+      ds.textContent = distM >= 1000
+        ? (distM / 1000).toFixed(1) + " km"
+        : distM + " m";
 
       var nav = document.createElement("a");
       nav.className = "inav";
@@ -695,6 +817,7 @@ window.NAV_URL   = function(p) { return "https://maps.apple.com/?ll="+p.lat+","+
 
       body.insertBefore(nm, body.firstChild);
       body.insertBefore(mt, nm.nextSibling);
+      body.insertBefore(ds, mt.nextSibling);
       row.appendChild(ico); row.appendChild(body); row.appendChild(nav);
 
       row.addEventListener("click", function() {
@@ -718,45 +841,86 @@ window.NAV_URL   = function(p) { return "https://maps.apple.com/?ll="+p.lat+","+
     });
 
     document.getElementById("list").appendChild(sec);
+    // Zoom sui POIFood
+    zoomOnFood();
+  }
+
+  function buildOverpassQuery(lat, lon, r) {
+    return '[out:json][timeout:15];'
+         + '('
+         + 'node[amenity~"^(restaurant|bar|cafe|fast_food)$"](around:' + r + ',' + lat + ',' + lon + ');'
+         + 'node[shop~"^(supermarket|convenience|bakery)$"](around:'  + r + ',' + lat + ',' + lon + ');'
+         + 'way[amenity~"^(restaurant|bar|cafe|fast_food)$"](around:'  + r + ',' + lat + ',' + lon + ');'
+         + 'way[shop~"^(supermarket|convenience|bakery)$"](around:'    + r + ',' + lat + ',' + lon + ');'
+         + ');'
+         + 'out center tags;';
+  }
+
+  function processOverpassResult(data, lat, lon) {
+    var els = (data.elements || []).filter(function(e) {
+      return e.tags && e.tags.name;
+    });
+    els.sort(function(a, b) {
+      var aLat = a.lat||(a.center&&a.center.lat)||lat;
+      var aLon = a.lon||(a.center&&a.center.lon)||lon;
+      var bLat = b.lat||(b.center&&b.center.lat)||lat;
+      var bLon = b.lon||(b.center&&b.center.lon)||lon;
+      return geoDistM(lat,lon,aLat,aLon) - geoDistM(lat,lon,bLat,bLon);
+    });
+    return els;
   }
 
   function queryFood(lat, lon) {
     foodBtn.textContent = "…";
     foodBtn.disabled = true;
-    var r = FOOD_RADIUS;
-    var q = "[out:json][timeout:15];"
-          + "("
-          + "node[amenity~"^(restaurant|bar|cafe|fast_food)$"](around:" + r + "," + lat + "," + lon + ");"
-          + "node[shop~"^(supermarket|convenience|bakery)$"](around:"  + r + "," + lat + "," + lon + ");"
-          + "way[amenity~"^(restaurant|bar|cafe|fast_food)$"](around:"  + r + "," + lat + "," + lon + ");"
-          + "way[shop~"^(supermarket|convenience|bakery)$"](around:"    + r + "," + lat + "," + lon + ");"
-          + ");"
-          + "out center tags;";
+    foodRadiusUsed = FOOD_RADIUS;
+
     fetch("https://overpass-api.de/api/interpreter", {
       method: "POST",
-      body: "data=" + encodeURIComponent(q)
+      body: "data=" + encodeURIComponent(buildOverpassQuery(lat, lon, FOOD_RADIUS))
     })
-    .then(function(resp) { return resp.json(); })
+    .then(function(resp) {
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      return resp.json();
+    })
     .then(function(data) {
-      var els = (data.elements || []).filter(function(e) {
-        return e.tags && e.tags.name;
-      });
-      // Ordina per distanza dal punto corrente
-      els.sort(function(a, b) {
-        var aLat = a.lat||(a.center&&a.center.lat)||lat;
-        var aLon = a.lon||(a.center&&a.center.lon)||lon;
-        var bLat = b.lat||(b.center&&b.center.lat)||lat;
-        var bLon = b.lon||(b.center&&b.center.lon)||lon;
-        return geoDistM(lat,lon,aLat,aLon) - geoDistM(lat,lon,bLat,bLon);
-      });
-      renderFoodSection(els);
-      foodBtn.innerHTML = "<span class=\"btn-ico\">🍽️</span><span class=\"btn-lbl\">Food</span>";
+      if (data.elements === undefined) throw new Error("risposta non valida");
+      foodRadiusUsed = FOOD_RADIUS;
+      renderFoodSection(processOverpassResult(data, lat, lon));
+      foodBtn.innerHTML = "<span class='btn-ico'>🍽️</span><span class='btn-lbl'>Food</span>";
       foodBtn.disabled = false;
     })
     .catch(function() {
-      foodBtn.innerHTML = "<span class=\"btn-ico\">🍽️</span><span class=\"btn-lbl\">Food</span>";
-      foodBtn.disabled = false;
-      alert("Errore nella ricerca locali. Controlla la connessione.");
+      // Primo errore: attendi 30s e riprova con raggio ridotto
+      var msgTxt = document.getElementById("food-searching-txt");
+      if (msgTxt) msgTxt.textContent = "🍽️ Riprovo entro " + FOOD_RADIUS_RETRY + " m… (30s)";
+      setTimeout(function() {
+        if (!foodActive) return; // utente ha già annullato
+        foodRadiusUsed = FOOD_RADIUS_RETRY;
+        fetch("https://overpass-api.de/api/interpreter", {
+          method: "POST",
+          body: "data=" + encodeURIComponent(buildOverpassQuery(lat, lon, FOOD_RADIUS_RETRY))
+        })
+        .then(function(resp) {
+          if (!resp.ok) throw new Error("HTTP " + resp.status);
+          return resp.json();
+        })
+        .then(function(data) {
+          if (data.elements === undefined) throw new Error("risposta non valida");
+          renderFoodSection(processOverpassResult(data, lat, lon));
+          foodBtn.innerHTML = "<span class='btn-ico'>🍽️</span><span class='btn-lbl'>Food</span>";
+          foodBtn.disabled = false;
+        })
+        .catch(function() {
+          foodBtn.innerHTML = "<span class='btn-ico'>🍽️</span><span class='btn-lbl'>Food</span>";
+          foodBtn.disabled = false;
+          foodActive = false;
+          foodBtn.classList.remove("active");
+          clearFood();
+          exitFoodMode();
+          alert("Errore nella ricerca locali. Controlla la connessione.");
+        });
+      }, 30000);
     });
   }
 
@@ -765,6 +929,7 @@ window.NAV_URL   = function(p) { return "https://maps.apple.com/?ll="+p.lat+","+
       foodActive = false;
       foodBtn.classList.remove("active");
       clearFood();
+      exitFoodMode();
       return;
     }
     if (!navigator.geolocation) {
@@ -777,6 +942,9 @@ window.NAV_URL   = function(p) { return "https://maps.apple.com/?ll="+p.lat+","+
         foodLon = pos.coords.longitude;
         foodActive = true;
         foodBtn.classList.add("active");
+        enterFoodMode();
+        // Mostra subito la posizione con il fix già ottenuto
+        updateLocationMarker(L.latLng(foodLat, foodLon), pos.coords.accuracy);
         queryFood(foodLat, foodLon);
       },
       function(err) {
