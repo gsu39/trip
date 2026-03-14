@@ -744,16 +744,42 @@ def main():
             wpt_seen_names.add(wp["name"].strip().lower())
             time.sleep(3)
 
-        # Wikipedia in parallelo sui waypoint senza tag wikipedia
+        # Wikipedia in parallelo sui waypoint senza tag wikipedia.
+        # Strategia: prima prova titolo esatto (veloce), poi search API (robusta).
         def _wp_wiki(wp):
+            name = wp["name"]
             for lang in ("it", "en"):
+                # 1) Titolo esatto
                 url = (f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/"
-                       f"{urllib.parse.quote(wp['name'].replace(' ', '_'))}")
+                       f"{urllib.parse.quote(name.replace(' ', '_'))}")
                 try:
                     data = _fetch_json(url, timeout=6)
                     if data.get("extract", "").strip():
-                        wp["tags"]["wikipedia"] = f"{lang}:{data.get('title', wp['name'])}"
+                        wp["tags"]["wikipedia"] = f"{lang}:{data.get('title', name)}"
                         return True
+                except Exception:
+                    pass
+                # 2) Search API — trova il titolo più simile al nome del waypoint
+                search_url = (
+                    f"https://{lang}.wikipedia.org/w/api.php"
+                    f"?action=query&list=search&srsearch={urllib.parse.quote(name)}"
+                    f"&srlimit=3&format=json&utf8=1"
+                )
+                try:
+                    sdata = _fetch_json(search_url, timeout=8)
+                    results = (sdata.get("query") or {}).get("search", [])
+                    for hit in results:
+                        hit_title = hit.get("title", "")
+                        if _name_similarity(name, hit_title) >= 0.25:
+                            sum_url = (f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/"
+                                       f"{urllib.parse.quote(hit_title.replace(' ', '_'))}")
+                            try:
+                                sum_data = _fetch_json(sum_url, timeout=6)
+                                if sum_data.get("extract", "").strip():
+                                    wp["tags"]["wikipedia"] = f"{lang}:{sum_data.get('title', hit_title)}"
+                                    return True
+                            except Exception:
+                                pass
                 except Exception:
                     pass
             return False

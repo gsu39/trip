@@ -59,8 +59,8 @@ body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
 .food-hdr { padding: 7px 12px; font-size: 0.72rem; font-weight: 700; color: #e8623a;
             background: #1a1a2e; border-top: 2px solid #e8623a; border-bottom: 1px solid #0f3460; }
 .food-empty { padding: 10px 12px; font-size: 0.72rem; color: #666; }
-.food-item { border-left: 3px solid #e8623a; padding-left: 9px; }
-.food-item.selected { background: rgba(232,98,58,0.18); }
+.food-item { }
+.food-item.selected { background: rgba(232,98,58,0.18); border-left: 3px solid #e8623a; padding-left: 9px; }
 .inav  { display: none; margin-left: auto; flex-shrink: 0; align-self: center;
          background: #e94560; border: none; border-radius: 50%; width: 28px; height: 28px;
          font-size: 0.85rem; cursor: pointer; color: white; text-decoration: none;
@@ -90,8 +90,8 @@ body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
       <button id="find-btn" class="hdr-btn" title="Cerca per nome"><span class="btn-ico"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span><span class="btn-lbl">Find</span></button>
       <button id="center-btn" class="hdr-btn" title="Centra la mappa su tutti i POI"><span class="btn-ico"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="7"/><polyline points="9 5 12 2 15 5"/><line x1="12" y1="22" x2="12" y2="17"/><polyline points="15 19 12 22 9 19"/><line x1="2" y1="12" x2="7" y2="12"/><polyline points="5 9 2 12 5 15"/><line x1="22" y1="12" x2="17" y2="12"/><polyline points="19 15 22 12 19 9"/></svg></span><span class="btn-lbl">Center</span></button>
       <button id="loc-btn" class="hdr-btn" title="Filtra POI vicini"><span class="btn-ico"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 73.9258 98.7793" width="14" height="18"><path d="M73.9258 74.8535C73.9258 85.0586 58.6426 92.2363 37.0117 92.2363C15.332 92.2363 0 85.0586 0 74.8535C0 66.4078 10.6024 60.0556 26.6602 58.1715L26.6602 59.4727C26.6602 61.5469 26.7423 63.4603 26.9162 65.1936C16.3275 66.6803 9.0332 70.4751 9.0332 74.8535C9.0332 80.6152 21.2402 85.2539 36.9629 85.2539C52.6367 85.2539 64.8926 80.5664 64.8926 74.8535C64.8926 70.5032 57.5364 66.6804 46.9187 65.1898C47.0883 63.4575 47.168 61.5454 47.168 59.4727L47.168 58.1528C63.2824 60.0108 73.9258 66.378 73.9258 74.8535Z" fill="currentColor"/><path d="M52.2461 21.4844C52.2461 28.5156 47.5098 34.4727 41.0156 36.2793L41.0156 57.6172C41.0156 70.5566 38.7207 77.5879 36.9629 77.5879C35.1562 77.5879 32.8613 70.5078 32.8613 57.6172L32.8613 36.2793C26.3672 34.4238 21.6797 28.5156 21.6797 21.4844C21.6797 13.0371 28.4668 6.15234 36.9629 6.15234C45.459 6.15234 52.2461 13.0371 52.2461 21.4844ZM27.4414 17.1387C27.4414 19.9707 29.8828 22.4121 32.666 22.4121C35.5469 22.4121 37.8906 19.9707 37.8906 17.1387C37.8906 14.3066 35.5469 11.9141 32.666 11.9141C29.8828 11.9141 27.4414 14.3066 27.4414 17.1387Z" fill="currentColor"/></svg></span><span class="btn-lbl">Near</span></button>
-      <button id="web-btn" class="hdr-btn" title="Solo POI con link Wikipedia o sito web"><span class="btn-ico"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3c-2.5 3-4 5.5-4 9s1.5 6 4 9"/><path d="M12 3c2.5 3 4 5.5 4 9s-1.5 6-4 9"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/></svg></span><span class="btn-lbl">Web</span></button>
-      <button id="food-btn" class="hdr-btn" title="Ristoranti e locali nelle vicinanze (1 km)"><span class="btn-ico">🍽️</span><span class="btn-lbl">Food</span></button>
+      <button id="web-btn" class="hdr-btn" title="Solo POI con link Wikipedia o sito web"><span class="btn-ico"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3c-2.5 3-4 5.5-4 9s1.5 6 4 9"/><path d="M12 3c2.5 3 4 5.5 4 9s-1.5 6-4 9"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/></svg></span><span class="btn-lbl">Wiki</span></button>
+      <button id="food-btn" class="hdr-btn" title="Ristoranti e locali nelle vicinanze (1 km)"><span class="btn-ico"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 53.6621 95.2637" width="18" height="18" fill="currentColor"><path d="M13.4521 89.3555C16.7724 89.3555 18.7256 87.5 18.6767 84.3262L17.9443 41.2109C17.9443 39.8438 18.5791 38.8184 19.751 38.2812C24.8291 36.084 27.1728 33.7891 26.8799 27.002L25.8056 3.27148C25.708 1.5625 24.7314 0.537109 23.1201 0.537109C21.5576 0.537109 20.6299 1.61133 20.6299 3.32031L20.9228 26.416C20.9228 27.7344 20.0439 28.6133 18.7256 28.6133C17.4072 28.6133 16.4795 27.7832 16.4795 26.5137L16.0888 2.63672C16.04 0.976562 15.0635 0 13.4521 0C11.8896 0 10.9131 0.976562 10.8642 2.63672L10.4736 26.5137C10.4736 27.7832 9.54587 28.6133 8.17869 28.6133C6.90915 28.6133 6.03025 27.7344 6.03025 26.416L6.27439 3.32031C6.27439 1.61133 5.39548 0.537109 3.83298 0.537109C2.22165 0.537109 1.19626 1.5625 1.09861 3.27148L0.024389 27.002C-0.26858 33.7891 2.07517 36.084 7.20212 38.2812C8.374 38.8184 9.00876 39.8438 9.00876 41.2109L8.27634 84.3262C8.22751 87.5 10.1806 89.3555 13.4521 89.3555ZM43.9209 55.2246L43.1885 84.2773C43.0908 87.5 45.0927 89.3555 48.3642 89.3555C51.6845 89.3555 53.6377 87.6953 53.6377 84.6191L53.6377 2.97852C53.6377 0.927734 52.2217 0 50.7568 0C49.292 0 48.3154 0.78125 46.9482 2.68555C40.7959 11.377 36.6455 27.8809 36.6455 42.9688L36.6455 44.6289C36.6455 47.168 37.6709 49.1699 39.5752 50.4395L42.0166 52.0508C43.3349 52.9785 43.9697 54.0039 43.9209 55.2246Z"/></svg></span><span class="btn-lbl">Food</span></button>
       <button id="map-toggle" class="hdr-btn" title="Mappa"><span class="btn-ico"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 81.1523 76.3184" width="19" height="18"><path d="M4.73633 74.8535C5.81055 74.8535 6.83594 74.5117 8.20312 73.7793L27.5391 63.4277L48.877 75.1465C50.3418 75.9277 51.9043 76.3184 53.418 76.3184C54.834 76.3184 56.25 75.9766 57.373 75.3418L77.5391 64.0137C79.9805 62.6465 81.1523 60.5469 81.1523 57.8125L81.1523 6.29883C81.1523 3.22266 79.4434 1.51367 76.3672 1.51367C75.3418 1.51367 74.2676 1.85547 72.9004 2.58789L52.5879 13.9648L31.5918 1.07422C30.4688 0.390625 29.1016 0.0488281 27.7344 0.0488281C26.3184 0.0488281 24.9023 0.390625 23.7305 1.07422L3.61328 12.4023C1.12305 13.7695 0 15.8691 0 18.5547L0 70.0684C0 73.1445 1.70898 74.8535 4.73633 74.8535ZM24.707 56.4453L8.05664 65.5273C7.86133 65.625 7.66602 65.7227 7.51953 65.7227C7.17773 65.7227 7.03125 65.5273 7.03125 65.1855L7.03125 20.3613C7.03125 19.4336 7.42188 18.75 8.30078 18.2129L23.3398 9.57031C23.8281 9.27734 24.2676 9.0332 24.707 8.74023ZM31.7871 57.1777L31.7871 9.7168C32.1777 9.96094 32.6172 10.2051 33.0078 10.4492L49.3652 20.4102L49.3652 66.8457C48.7793 66.5039 48.1934 66.2109 47.6074 65.8691ZM56.3965 67.6758L56.3965 19.9707L73.0957 10.8398C73.291 10.7422 73.4863 10.6445 73.6328 10.6445C73.9258 10.6445 74.0723 10.8398 74.0723 11.1816L74.0723 56.0547C74.0723 56.9824 73.7305 57.666 72.8516 58.2031L58.252 66.6016C57.666 66.9922 57.0312 67.334 56.3965 67.6758Z" fill="currentColor"/></svg></span><span class="btn-lbl">Map</span></button>
     </div>
   </div>
@@ -399,6 +399,19 @@ window.NAV_URL   = function(p) { return "https://maps.apple.com/?ll="+p.lat+","+
 
   render();
 
+  // Zoom iniziale: adatta la mappa a tutti i POI visibili (o alla traccia)
+  (function() {
+    var latlngs = markers.map(function(m) { return m.getLatLng(); });
+    if (latlngs.length === 0) {
+      latlngs = TRACK.map(function(p) { return L.latLng(p[0], p[1]); });
+    }
+    if (latlngs.length === 1) {
+      map.setView(latlngs[0], 14);
+    } else if (latlngs.length > 1) {
+      map.fitBounds(L.latLngBounds(latlngs), {padding: [30, 30]});
+    }
+  })();
+
   // Find — text search toggle
   var findBtn    = document.getElementById("find-btn");
   var searchBar  = document.getElementById("search-bar");
@@ -569,13 +582,14 @@ window.NAV_URL   = function(p) { return "https://maps.apple.com/?ll="+p.lat+","+
   });
 
   // ── FOOD ──────────────────────────────────────────
-  var FOOD_RADIUS   = 5000;   // metri (primo tentativo)
-  var FOOD_RADIUS_RETRY = 1000; // metri (secondo tentativo dopo errore)
+  var FOOD_RADIUS   = 5000;   // metri
   var foodActive    = false;
   var foodMarkers   = [];
   var foodElements  = [];     // cache elementi Overpass per ri-filtrare
   var foodLat       = null;
   var foodLon       = null;
+  var foodQueryLat = null;  // coordinata della query Overpass
+  var foodQueryLon = null;
   var foodRadiusUsed = FOOD_RADIUS; // raggio effettivamente usato (per header lista)
   var foodBtn       = document.getElementById("food-btn");
 
@@ -638,7 +652,7 @@ window.NAV_URL   = function(p) { return "https://maps.apple.com/?ll="+p.lat+","+
     cancelBtn.addEventListener("click", function() {
       foodActive = false;
       foodBtn.classList.remove("active");
-      foodBtn.innerHTML = "<span class='btn-ico'>🍽️</span><span class='btn-lbl'>Food</span>";
+      foodBtn.innerHTML = "<span class='btn-ico'><svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 53.6621 95.2637' width='18' height='18' fill='currentColor'><path d='M13.4521 89.3555C16.7724 89.3555 18.7256 87.5 18.6767 84.3262L17.9443 41.2109C17.9443 39.8438 18.5791 38.8184 19.751 38.2812C24.8291 36.084 27.1728 33.7891 26.8799 27.002L25.8056 3.27148C25.708 1.5625 24.7314 0.537109 23.1201 0.537109C21.5576 0.537109 20.6299 1.61133 20.6299 3.32031L20.9228 26.416C20.9228 27.7344 20.0439 28.6133 18.7256 28.6133C17.4072 28.6133 16.4795 27.7832 16.4795 26.5137L16.0888 2.63672C16.04 0.976562 15.0635 0 13.4521 0C11.8896 0 10.9131 0.976562 10.8642 2.63672L10.4736 26.5137C10.4736 27.7832 9.54587 28.6133 8.17869 28.6133C6.90915 28.6133 6.03025 27.7344 6.03025 26.416L6.27439 3.32031C6.27439 1.61133 5.39548 0.537109 3.83298 0.537109C2.22165 0.537109 1.19626 1.5625 1.09861 3.27148L0.024389 27.002C-0.26858 33.7891 2.07517 36.084 7.20212 38.2812C8.374 38.8184 9.00876 39.8438 9.00876 41.2109L8.27634 84.3262C8.22751 87.5 10.1806 89.3555 13.4521 89.3555ZM43.9209 55.2246L43.1885 84.2773C43.0908 87.5 45.0927 89.3555 48.3642 89.3555C51.6845 89.3555 53.6377 87.6953 53.6377 84.6191L53.6377 2.97852C53.6377 0.927734 52.2217 0 50.7568 0C49.292 0 48.3154 0.78125 46.9482 2.68555C40.7959 11.377 36.6455 27.8809 36.6455 42.9688L36.6455 44.6289C36.6455 47.168 37.6709 49.1699 39.5752 50.4395L42.0166 52.0508C43.3349 52.9785 43.9697 54.0039 43.9209 55.2246Z'/></svg></span><span class='btn-lbl'>Food</span>";
       foodBtn.disabled = false;
       clearFood();
       exitFoodMode();
@@ -723,11 +737,15 @@ window.NAV_URL   = function(p) { return "https://maps.apple.com/?ll="+p.lat+","+
     var searching = document.getElementById("food-searching");
     if (searching) searching.remove();
 
-    // Applica filtro testo se attivo
+    // Applica filtro testo su nome, tipo e cucina
     var q = searchQuery.trim().toLowerCase();
     var filtered = q ? elements.filter(function(el) {
-      var name = (el.tags && el.tags.name) ? el.tags.name.toLowerCase() : "";
-      return name.indexOf(q) !== -1;
+      var tags = el.tags || {};
+      var name    = (tags.name    || "").toLowerCase();
+      var cuisine = (tags.cuisine || "").toLowerCase();
+      var cat     = foodCatInfo(tags);
+      var label   = cat.label.toLowerCase();
+      return name.indexOf(q) !== -1 || label.indexOf(q) !== -1 || cuisine.indexOf(q) !== -1;
     }) : elements;
 
     var sec = document.createElement("div");
@@ -885,42 +903,20 @@ window.NAV_URL   = function(p) { return "https://maps.apple.com/?ll="+p.lat+","+
     })
     .then(function(data) {
       if (data.elements === undefined) throw new Error("risposta non valida");
-      foodRadiusUsed = FOOD_RADIUS;
+      if (data.remark && /error|timeout|exceeded/i.test(data.remark)) throw new Error("Overpass: " + data.remark);
+      foodQueryLat = lat; foodQueryLon = lon;
       renderFoodSection(processOverpassResult(data, lat, lon));
-      foodBtn.innerHTML = "<span class='btn-ico'>🍽️</span><span class='btn-lbl'>Food</span>";
+      foodBtn.innerHTML = "<span class='btn-ico'><svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 53.6621 95.2637' width='18' height='18' fill='currentColor'><path d='M13.4521 89.3555C16.7724 89.3555 18.7256 87.5 18.6767 84.3262L17.9443 41.2109C17.9443 39.8438 18.5791 38.8184 19.751 38.2812C24.8291 36.084 27.1728 33.7891 26.8799 27.002L25.8056 3.27148C25.708 1.5625 24.7314 0.537109 23.1201 0.537109C21.5576 0.537109 20.6299 1.61133 20.6299 3.32031L20.9228 26.416C20.9228 27.7344 20.0439 28.6133 18.7256 28.6133C17.4072 28.6133 16.4795 27.7832 16.4795 26.5137L16.0888 2.63672C16.04 0.976562 15.0635 0 13.4521 0C11.8896 0 10.9131 0.976562 10.8642 2.63672L10.4736 26.5137C10.4736 27.7832 9.54587 28.6133 8.17869 28.6133C6.90915 28.6133 6.03025 27.7344 6.03025 26.416L6.27439 3.32031C6.27439 1.61133 5.39548 0.537109 3.83298 0.537109C2.22165 0.537109 1.19626 1.5625 1.09861 3.27148L0.024389 27.002C-0.26858 33.7891 2.07517 36.084 7.20212 38.2812C8.374 38.8184 9.00876 39.8438 9.00876 41.2109L8.27634 84.3262C8.22751 87.5 10.1806 89.3555 13.4521 89.3555ZM43.9209 55.2246L43.1885 84.2773C43.0908 87.5 45.0927 89.3555 48.3642 89.3555C51.6845 89.3555 53.6377 87.6953 53.6377 84.6191L53.6377 2.97852C53.6377 0.927734 52.2217 0 50.7568 0C49.292 0 48.3154 0.78125 46.9482 2.68555C40.7959 11.377 36.6455 27.8809 36.6455 42.9688L36.6455 44.6289C36.6455 47.168 37.6709 49.1699 39.5752 50.4395L42.0166 52.0508C43.3349 52.9785 43.9697 54.0039 43.9209 55.2246Z'/></svg></span><span class='btn-lbl'>Food</span>";
       foodBtn.disabled = false;
     })
     .catch(function() {
-      // Primo errore: attendi 30s e riprova con raggio ridotto
-      var msgTxt = document.getElementById("food-searching-txt");
-      if (msgTxt) msgTxt.textContent = "🍽️ Riprovo entro " + FOOD_RADIUS_RETRY + " m… (30s)";
-      setTimeout(function() {
-        if (!foodActive) return; // utente ha già annullato
-        foodRadiusUsed = FOOD_RADIUS_RETRY;
-        fetch("https://overpass-api.de/api/interpreter", {
-          method: "POST",
-          body: "data=" + encodeURIComponent(buildOverpassQuery(lat, lon, FOOD_RADIUS_RETRY))
-        })
-        .then(function(resp) {
-          if (!resp.ok) throw new Error("HTTP " + resp.status);
-          return resp.json();
-        })
-        .then(function(data) {
-          if (data.elements === undefined) throw new Error("risposta non valida");
-          renderFoodSection(processOverpassResult(data, lat, lon));
-          foodBtn.innerHTML = "<span class='btn-ico'>🍽️</span><span class='btn-lbl'>Food</span>";
-          foodBtn.disabled = false;
-        })
-        .catch(function() {
-          foodBtn.innerHTML = "<span class='btn-ico'>🍽️</span><span class='btn-lbl'>Food</span>";
-          foodBtn.disabled = false;
-          foodActive = false;
-          foodBtn.classList.remove("active");
-          clearFood();
-          exitFoodMode();
-          alert("Errore nella ricerca locali. Controlla la connessione.");
-        });
-      }, 30000);
+      foodBtn.innerHTML = "<span class='btn-ico'><svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 53.6621 95.2637' width='18' height='18' fill='currentColor'><path d='M13.4521 89.3555C16.7724 89.3555 18.7256 87.5 18.6767 84.3262L17.9443 41.2109C17.9443 39.8438 18.5791 38.8184 19.751 38.2812C24.8291 36.084 27.1728 33.7891 26.8799 27.002L25.8056 3.27148C25.708 1.5625 24.7314 0.537109 23.1201 0.537109C21.5576 0.537109 20.6299 1.61133 20.6299 3.32031L20.9228 26.416C20.9228 27.7344 20.0439 28.6133 18.7256 28.6133C17.4072 28.6133 16.4795 27.7832 16.4795 26.5137L16.0888 2.63672C16.04 0.976562 15.0635 0 13.4521 0C11.8896 0 10.9131 0.976562 10.8642 2.63672L10.4736 26.5137C10.4736 27.7832 9.54587 28.6133 8.17869 28.6133C6.90915 28.6133 6.03025 27.7344 6.03025 26.416L6.27439 3.32031C6.27439 1.61133 5.39548 0.537109 3.83298 0.537109C2.22165 0.537109 1.19626 1.5625 1.09861 3.27148L0.024389 27.002C-0.26858 33.7891 2.07517 36.084 7.20212 38.2812C8.374 38.8184 9.00876 39.8438 9.00876 41.2109L8.27634 84.3262C8.22751 87.5 10.1806 89.3555 13.4521 89.3555ZM43.9209 55.2246L43.1885 84.2773C43.0908 87.5 45.0927 89.3555 48.3642 89.3555C51.6845 89.3555 53.6377 87.6953 53.6377 84.6191L53.6377 2.97852C53.6377 0.927734 52.2217 0 50.7568 0C49.292 0 48.3154 0.78125 46.9482 2.68555C40.7959 11.377 36.6455 27.8809 36.6455 42.9688L36.6455 44.6289C36.6455 47.168 37.6709 49.1699 39.5752 50.4395L42.0166 52.0508C43.3349 52.9785 43.9697 54.0039 43.9209 55.2246Z'/></svg></span><span class='btn-lbl'>Food</span>";
+      foodBtn.disabled = false;
+      foodActive = false;
+      foodBtn.classList.remove("active");
+      clearFood();
+      exitFoodMode();
+      alert("Ricerca locali non disponibile. Controlla la connessione.");
     });
   }
 
@@ -942,10 +938,18 @@ window.NAV_URL   = function(p) { return "https://maps.apple.com/?ll="+p.lat+","+
         foodLon = pos.coords.longitude;
         foodActive = true;
         foodBtn.classList.add("active");
-        enterFoodMode();
-        // Mostra subito la posizione con il fix già ottenuto
         updateLocationMarker(L.latLng(foodLat, foodLon), pos.coords.accuracy);
-        queryFood(foodLat, foodLon);
+        // Riusa cache se posizione entro FOOD_RADIUS/5 dalla query precedente
+        var reuse = foodQueryLat !== null && foodElements.length > 0
+                 && geoDistM(foodLat, foodLon, foodQueryLat, foodQueryLon) <= FOOD_RADIUS / 5;
+        if (reuse) {
+          enterFoodMode();
+          renderFoodSection(foodElements);
+        } else {
+          foodRadiusUsed = FOOD_RADIUS;
+          enterFoodMode();
+          queryFood(foodLat, foodLon);
+        }
       },
       function(err) {
         var errCodes = {1:"Permesso negato", 2:"Posizione non disponibile", 3:"Timeout"};
